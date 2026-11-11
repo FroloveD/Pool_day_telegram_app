@@ -53,6 +53,10 @@
   .dpop{position:absolute;transform:translate(-50%,-50%);font-weight:800;font-size:18px;color:#ffd76e;text-shadow:0 1px 3px #000,0 0 5px #000;pointer-events:none;white-space:nowrap}
   .dpop.kill{color:#ff5a4a;font-size:24px}
   #hitm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 4px #000;opacity:0;transition:opacity .15s;pointer-events:none}
+  #bot-panel{position:fixed;right:12px;top:12px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto}
+  #bot-panel.show{display:flex}
+  #bot-panel button{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;font-size:14px;font-weight:700;padding:4px 10px;cursor:pointer;touch-action:manipulation}
+  #bot-panel button:hover{background:rgba(60,120,180,.6)}
   #dmg-indicator{position:absolute;left:50%;top:50%;width:180px;height:180px;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity 0.1s linear}
   #dmg-arrow{width:100%;height:100%;background:radial-gradient(circle, transparent 55%, rgba(255, 30, 30, 0.75) 75%, transparent 76%);clip-path:polygon(30% 0%, 70% 0%, 50% 25%)}
 
@@ -117,6 +121,7 @@
   <div id="msg"></div>
   <div id="tags"></div>
   <div id="hitm">✕</div>
+  <div id="bot-panel"></div>
 </div>
 
 <div id="mobile-controls">
@@ -1143,6 +1148,7 @@ function netConnect(){
         P.team = netTeam; const nsp=getTeamSpawn(P.team === 'blue',P); P.x=nsp[0]; P.z=nsp[1];
         netStatus(`В комнате ${room} · ${netIsHost ? 'вы хост матча' : 'подключено'} · команда ${netTeam === 'red' ? 'красных' : 'синих'}`);
         const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='block';
+        updateBotPanel();
         showMsg('Сеть подключена');
       } else if(m.type === 'peer' || m.type === 'player'){
         if(m.id === netId) return;
@@ -1157,8 +1163,10 @@ function netConnect(){
       } else if(m.type === 'hostChanged'){
         netIsHost = m.id === netId;
         netStatus(netIsHost ? 'Вы стали хостом матча.' : 'Хост матча изменился.');
+        updateBotPanel();
       } else if(m.type === 'botState' && !netIsHost){
-        (m.bots||[]).forEach((v,i)=>{ const b=bots[i]; if(!b) return; Object.assign(b,v); b.weapon=WEAPONS.find(w=>w.name===v.weapon)||b.weapon; });
+        (m.bots||[]).forEach((v,i)=>{ let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; } Object.assign(b,v); b.weapon=WEAPONS.find(w=>w.name===v.weapon)||b.weapon; });
+        if(bots.length > (m.bots||[]).length) bots.length = (m.bots||[]).length;
         if(m.score){ scoreMe=m.score.red||0; scoreBots=m.score.blue||0; }
       } else if(m.type === 'damage' && m.target === netId){
         P.hp = Math.max(0, P.hp - (m.amount||0)); beep('hurt'); dmgTimer=0.8;
@@ -1180,6 +1188,7 @@ function netConnect(){
     netSocket.addEventListener('close', () => {
       netConnected=false; netIsHost=false; netId=null; netPlayers.clear();
       netStatus('Соединение закрыто. Одиночная игра продолжает работать.'); const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='none';
+        updateBotPanel();
     });
     netSocket.addEventListener('error', () => netStatus('Не удалось подключиться. Проверь адрес и запущен ли сервер.'));
   }catch(e){ netStatus('Ошибка WebSocket: '+e.message); }
@@ -1228,6 +1237,34 @@ function spawnBot(i, team){
 }
 for(let i=0; i<5; i++) spawnBot(i, 'blue');   // противники
 for(let i=0; i<4; i++) spawnBot(i+2, 'red');  // союзники (за вас)
+
+function addBot(team){
+  if(bots.length >= 24){ showMsg('Достигнут лимит ботов'); return; }
+  spawnBot(bots.length, team);
+  showMsg(team === 'red' ? 'Союзник добавлен' : 'Противник добавлен');
+}
+function removeBot(team){
+  for(let i = bots.length - 1; i >= 0; i--){
+    if(bots[i].team === team){ bots.splice(i, 1); showMsg(team === 'red' ? 'Союзник убран' : 'Противник убран'); return; }
+  }
+}
+const botPanel = document.getElementById('bot-panel');
+if(botPanel){
+  botPanel.innerHTML = '<button data-act="add-red">+ 🔴 союзник</button><button data-act="del-red">− 🔴 союзник</button><button data-act="add-blue">+ 🔵 противник</button><button data-act="del-blue">− 🔵 противник</button>';
+  botPanel.addEventListener('click', (e) => {
+    const act = e.target && e.target.dataset && e.target.dataset.act;
+    if(!act) return;
+    e.stopPropagation();
+    if(act === 'add-red') addBot('red');
+    else if(act === 'del-red') removeBot('red');
+    else if(act === 'add-blue') addBot('blue');
+    else if(act === 'del-blue') removeBot('blue');
+  });
+}
+function updateBotPanel(){
+  if(botPanel) botPanel.classList.toggle('show', !netConnected || netIsHost);
+}
+updateBotPanel();
 
 let mouseDown = false;
 if(!isMobile){
