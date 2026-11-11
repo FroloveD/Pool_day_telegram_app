@@ -829,7 +829,7 @@ const keys = {};
 let ammo = 0, reloading = 0, fireCd = 0, zoomed = false;
 let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
 let roundTimeLeft = 300, roundOver = false, matchLive = false, roundWinner = null;
-let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0, burstCount = 0;
+let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0, burstCount = 0, eyeOff = 1.65;
 let statFrags = 0, statDeaths = 0;
 let buyingPhase = 1;
 
@@ -1074,7 +1074,7 @@ function shoot(){
   recoilOffset = 0.08;
   beep('shot');
 
-  const oy = P.y + 1.65;
+  const oy = P.y + eyeOff;
   const cpb = Math.cos(P.pitch), dbx = Math.sin(P.yaw)*cpb, dby = Math.sin(P.pitch), dbz = -Math.cos(P.yaw)*cpb;
   const distMul = 1 + Math.min(2.5, rayDist(P.x, oy, P.z, dbx, dby, dbz) / 18);
   const firstShot = spreadHeat <= 0 && !P.moving && !P.airborne;
@@ -1680,6 +1680,7 @@ function update(dt, t){
   if(roundActive){
     const inPool = !!(inAnyPool(P.x, P.z, 0) && P.y < -0.2);
     let isCrouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
+    eyeOff += ((isCrouching ? 0.95 : 1.65) - eyeOff) * Math.min(1, dt * 10);
     let currentSpeed = P.speed * (isCrouching ? 0.5 : 1.0) * (inPool ? 0.55 : 1.0) * (keys['ShiftLeft'] ? 1.4 : 1.0) * (P.armor === 1 ? 0.67 : 1.0);
 
     const cy = Math.cos(P.yaw), sy = Math.sin(P.yaw);
@@ -2073,9 +2074,7 @@ function draw(t){
   const proj = persp(fovA, asp, 0.1, 200);
 
   const bob = Math.sin(walkTimer) * 0.03;
-  let isCrouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
-  const targetEyeY = isCrouching ? 0.95 : 1.65;
-  const eye = { x: P.x, y: P.y + targetEyeY + bob, z: P.z };
+  const eye = { x: P.x, y: P.y + eyeOff + bob, z: P.z };
   const vp = mul(proj, view(eye.x, eye.y, eye.z, P.yaw, P.pitch));
   updateTags(vp, eye);
 
