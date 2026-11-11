@@ -1,7 +1,5 @@
-@'
-// Заполните эти значения перед публикацией Mini App.
+// Заполните cloudWsUrl после первого деплоя сервера на Fly.io (формат: wss://имя-приложения.fly.dev).
 window.GAME_CONFIG = {
-  cloudWsUrl: "",
+  cloudWsUrl: "wss://pool-day-telegram-app.fly.dev",
   botUsername: "fy_pool_day_arena_bot"
 };
-'@ | Set-Content -Encoding utf8 .\telegram-config.js
