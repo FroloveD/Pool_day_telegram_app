@@ -33,9 +33,9 @@ fly.toml / Dockerfile       Шаблон облачного развёртыва
 ЧАСТЬ 2. ОПУБЛИКОВАТЬ MINI APP (HTTPS ОБЯЗАТЕЛЕН)
 -------------------------------------------------
 Telegram Mini App нельзя открыть с file:// или обычного http:// адреса.
-Загрузите index.html и telegram-config.js на HTTPS-хостинг статических файлов:
-Firebase Hosting, GitHub Pages с HTTPS, Netlify или аналогичный.
-Оба файла должны лежать рядом в одной папке.
+В этой сборке облачный сервер на Fly.io сам отдаёт index.html и
+telegram-config.js по HTTPS — отдельный статический хостинг не нужен.
+Адрес Mini App совпадает с адресом сервера: https://ИМЯ-ПРИЛОЖЕНИЯ.fly.dev
 
 Откройте telegram-config.js и заполните:
   window.GAME_CONFIG = {
@@ -43,35 +43,34 @@ Firebase Hosting, GitHub Pages с HTTPS, Netlify или аналогичный.
     botUsername: "username_вашего_бота"
   };
 
-После этого опубликуйте файлы повторно. В BotFather укажите тот же HTTPS URL Mini App.
+После этого в BotFather укажите тот же HTTPS URL Mini App.
 
 ЧАСТЬ 3. ОБЛАЧНЫЙ СЕРВЕР НА FLY.IO (ПОСТОЯННЫЙ АДРЕС)
 --------------------------------------------
+Одно приложение Fly обслуживает сразу: статику игры (index.html,
+telegram-config.js), WebSocket-релей и Telegram-webhook.
 1. Создайте репозиторий GitHub и загрузите содержимое этой папки.
 2. Установите Fly CLI: https://fly.io/docs/flyctl/install/
 3. В папке проекта выполните:
      fly auth login
      fly launch --no-deploy
-   Fly определит fly.toml (приложение fy-pool-day, регион waw).
-   Если имя занято, Fly предложит другое — используйте его во всех шагах ниже.
-4. Задайте секреты (вместо fy-pool-day подставьте имя вашего приложения):
+   Fly определит fly.toml (приложение pool-day-telegram-app, регион ams).
+   Если имя занято, Fly предложит другое — подставьте его во всех шагах ниже
+   (в fly.toml, telegram-config.js и секретах).
+4. Задайте секреты (вместо pool-day-telegram-app подставьте имя вашего приложения):
      fly secrets set BOT_TOKEN="ТОКЕН_ОТ_BOTFATHER"
-     fly secrets set WEBAPP_URL="https://ИМЯ-СТАТИКИ.github.io/РЕПО/"
+     fly secrets set WEBAPP_URL="https://pool-day-telegram-app.fly.dev"
      fly secrets set WEBHOOK_SECRET="случайная_строка_из_букв_цифр"
-     fly secrets set PUBLIC_SERVER_URL="https://fy-pool-day.fly.dev"
+     fly secrets set PUBLIC_SERVER_URL="https://pool-day-telegram-app.fly.dev"
 5. Задеплойте:
      fly deploy
 6. После деплоя сервер сам установит Telegram-webhook (нужны все 4 секрета).
-   Проверка: https://fy-pool-day.fly.dev/health должен вернуть JSON с ok:true.
-   WebSocket URL для telegram-config.js:
-     wss://fy-pool-day.fly.dev
-7. В telegram-config.js пропишите:
-     cloudWsUrl: "wss://fy-pool-day.fly.dev"
-     botUsername: "username_вашего_бота"
-   и опубликуйте index.html + telegram-config.js на HTTPS-хостинге (см. ЧАСТЬ 2).
-
-Мини-приложение (index.html и telegram-config.js) размещается отдельно на
-GitHub Pages: Settings → Pages → Deploy from branch → main → / (root).
+   Проверка: https://pool-day-telegram-app.fly.dev/health → JSON с ok:true.
+   Игра открывается на том же адресе: https://pool-day-telegram-app.fly.dev
+   WebSocket URL уже прописан в telegram-config.js:
+     wss://pool-day-telegram-app.fly.dev
+7. В BotFather (Bot Settings → Menu Button) укажите:
+     https://pool-day-telegram-app.fly.dev
 
 Для игры игрокам достаточно выбрать «Облачный сервер» и подключиться.
 Приложение Fly засыпает при простое и просыпается на первый запрос; первый

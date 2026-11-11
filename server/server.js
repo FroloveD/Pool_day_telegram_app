@@ -1,5 +1,7 @@
 const WebSocket = require("ws");
 const http = require("http");
+const fs = require("fs");
+const path = require("path");
 
 const PORT = Number(process.env.PORT || 8080);
 const MAX_ROOM_PLAYERS = Number(process.env.MAX_ROOM_PLAYERS || 12);
@@ -35,6 +37,17 @@ const server = http.createServer(async (req, res) => {
       } catch (err) { console.error("Telegram webhook error:", err.message); res.writeHead(200); res.end("ok"); }
     });
     return;
+  }
+  if (req.method === "GET") {
+    const STATIC_FILES = { "/": "index.html", "/index.html": "index.html", "/telegram-config.js": "telegram-config.js" };
+    const staticFile = STATIC_FILES[req.url.split("?")[0]];
+    if (staticFile) {
+      const fullPath = path.join(__dirname, staticFile);
+      if (fs.existsSync(fullPath)) {
+        res.writeHead(200, { "content-type": staticFile.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8" });
+        return fs.createReadStream(fullPath).pipe(res);
+      }
+    }
   }
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json; charset=utf-8" });

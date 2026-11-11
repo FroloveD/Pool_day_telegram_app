@@ -1,5 +1,5 @@
-app = "fy-pool-day"
-primary_region = "waw"
+app = 'pool-day-telegram-app'
+primary_region = 'ams'
 
 [env]
   PORT = "8080"
@@ -7,10 +7,10 @@ primary_region = "waw"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
-  processes = ["app"]
+  processes = ['app']
 
   [[http_service.ports]]
     port = 80
@@ -19,3 +19,9 @@ primary_region = "waw"
   [[http_service.ports]]
     port = 443
     handlers = ["tls", "http"]
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256
