@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: fy-pool-day-game-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: BOT_TOKEN
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false

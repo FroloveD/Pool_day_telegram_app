@@ -1,0 +1,19 @@
+{
+  "name": "fy-pool-day-multiplayer-relay",
+  "version": "1.2.0",
+  "private": true,
+  "description": "Telegram Mini App + dual local/cloud multiplayer relay",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "internet": "node server.js --internet",
+    "set-webhook": "node set-webhook.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "localtunnel": "^2.0.2",
+    "ws": "^8.18.0"
+  }
+}
