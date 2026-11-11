@@ -153,7 +153,10 @@ wss.on("connection", (ws) => {
           weapon: String(b.weapon || "").slice(0, 32), team: b.team === "red" ? "red" : "blue",
           diedAt: num(b.diedAt)
         })),
-        score: { red: num(msg.score && msg.score.red), blue: num(msg.score && msg.score.blue) }
+        score: { red: num(msg.score && msg.score.red), blue: num(msg.score && msg.score.blue) },
+        timeLeft: Math.max(0, Math.min(3600, num(msg.timeLeft))),
+        roundOver: !!msg.roundOver,
+        winner: msg.winner === 'blue' ? 'blue' : msg.winner === 'red' ? 'red' : 'draw'
       };
       broadcast(room, room.botState, id);
     } else if (msg.type === "botHit") {

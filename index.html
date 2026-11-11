@@ -171,6 +171,12 @@
   <p>Сначала основное, затем пистолет. Вызов магазина: <span class="kbd">B</span>.</p>
 </div>
 
+<div id="roundover" class="overlay" style="display:none">
+  <h1 id="roundover-title"></h1>
+  <p id="roundover-score"></p>
+  <button type="button" onclick="backToTeamSelect(event)">К выбору команды</button>
+</div>
+
 <script>
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
 let isMobile = (isTouchDevice || window.innerWidth < 800) && !(typeof matchMedia === 'function' && matchMedia('(pointer:fine)').matches && matchMedia('(hover:hover)').matches);
@@ -791,6 +797,7 @@ const P = { x:pSpawn[0], y:0.1, z:pSpawn[1], vy:0, yaw:Math.PI/2, pitch:0, hp:10
 const keys = {};
 let ammo = 0, reloading = 0, fireCd = 0, zoomed = false;
 let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
+let roundTimeLeft = 300, roundOver = false, matchLive = false, roundWinner = null;
 let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0;
 let buyingPhase = 1;
 
@@ -1189,6 +1196,9 @@ function netConnect(){
         (m.bots||[]).forEach((v,i)=>{ let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; } Object.assign(b,v); b.weapon=WEAPONS.find(w=>w.name===v.weapon)||b.weapon; });
         if(bots.length > (m.bots||[]).length) bots.length = (m.bots||[]).length;
         if(m.score){ scoreMe=m.score.red||0; scoreBots=m.score.blue||0; }
+        if(typeof m.timeLeft === 'number') roundTimeLeft = Math.max(0, m.timeLeft);
+        if(m.roundOver && !roundOver){ roundOver = true; roundActive = false; matchLive = false; roundWinner = m.winner || 'draw'; showRoundOver(roundWinner); }
+        else if(!m.roundOver && roundOver){ roundOver = false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
       } else if(m.type === 'damage' && m.target === netId){
         P.hp = Math.max(0, P.hp - (m.amount||0)); beep('hurt'); dmgTimer=0.8;
         if(P.hp <= 0){
@@ -1214,7 +1224,7 @@ function netConnect(){
     netSocket.addEventListener('error', () => netStatus('Не удалось подключиться. Проверь адрес и запущен ли сервер.'));
   }catch(e){ netStatus('Ошибка WebSocket: '+e.message); }
 }
-function netDisconnect(){ if(netSocket){ netSocket.close(); netSocket=null; } netConnected=false; netIsHost=false; netPlayers.clear(); netStatus('Отключено · одиночная игра'); }
+function netDisconnect(){ if(netSocket){ netSocket.close(); netSocket=null; } netConnected=false; netIsHost=false; netPlayers.clear(); netStatus('Отключено · одиночная игра'); matchLive=false; roundOver=false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
 document.getElementById('net-connect').addEventListener('click', netConnect);
 document.getElementById('net-disconnect').addEventListener('click', netDisconnect);
 document.getElementById('net-invite').addEventListener('click', () => {
@@ -1239,7 +1249,7 @@ function netPublish(now){
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots}});
+    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw'});
   }
 }
 
@@ -1340,6 +1350,7 @@ function buildMenuForPhase(){
       } else {
         wmenuEl.style.display = 'none';
         roundActive = true;
+        if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = 300; }
         switchSlot(1);
         if(!isMobile){ try{ cv.requestPointerLock(); }catch(e){} }
       }
@@ -1360,7 +1371,34 @@ function startBuyingProcess(ev){
   ensureAudio();
   playing = true;
   startEl.style.display = 'none';
+  const ro = document.getElementById('roundover');
+  if(ro) ro.style.display = 'none';
   openBuyMenu();
+}
+
+function endRoundByTime(){
+  roundOver = true; roundActive = false;
+  roundWinner = scoreMe > scoreBots ? 'red' : scoreMe < scoreBots ? 'blue' : 'draw';
+  showRoundOver(roundWinner);
+  if(!isMobile && document.exitPointerLock){ try{ document.exitPointerLock(); }catch(e){} }
+}
+function showRoundOver(winner){
+  const el = document.getElementById('roundover');
+  if(!el) return;
+  const title = document.getElementById('roundover-title');
+  if(winner === 'red'){ title.textContent = '🔴 Красные победили!'; title.style.color = '#ff6b6b'; }
+  else if(winner === 'blue'){ title.textContent = '🔵 Синие победили!'; title.style.color = '#6bb8ff'; }
+  else { title.textContent = '⚖ Ничья!'; title.style.color = '#ffd76e'; }
+  document.getElementById('roundover-score').textContent = `Счёт: Красные ${scoreMe} : ${scoreBots} Синие · время раунда вышло`;
+  el.style.display = 'flex';
+}
+function backToTeamSelect(ev){
+  if(ev) ev.stopPropagation();
+  const ro = document.getElementById('roundover');
+  if(ro) ro.style.display = 'none';
+  playing = false; roundActive = false; matchLive = false; roundOver = false; roundWinner = null;
+  if(!isMobile && document.exitPointerLock){ try{ document.exitPointerLock(); }catch(e){} }
+  startEl.style.display = 'flex';
 }
 
 let mobMove = {x:0, y:0};
@@ -1652,7 +1690,12 @@ function update(dt, t){
   }
 
   if(msgT > 0){ msgT -= dt; if(msgT <= 0 && !roundActive) msgEl.textContent = ''; }
-  statsEl.textContent = `Красные ${scoreMe} : ${scoreBots} Синие`;
+  if(roundActive && matchLive && !roundOver && (!netConnected || netIsHost)){
+    roundTimeLeft -= dt;
+    if(roundTimeLeft <= 0){ roundTimeLeft = 0; endRoundByTime(); }
+  }
+  const rt = Math.max(0, roundTimeLeft);
+  statsEl.textContent = `Красные ${scoreMe} : ${scoreBots} Синие` + (matchLive ? ` · ${Math.floor(rt/60)}:${String(Math.floor(rt%60)).padStart(2,'0')}` : '');
   hpEl.textContent = `❤ ${Math.ceil(P.hp)}`;
   hpEl.style.color = P.hp > 50 ? '#fff' : P.hp > 25 ? '#ffb347' : '#ff5555';
   
