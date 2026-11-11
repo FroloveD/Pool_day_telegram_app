@@ -1179,8 +1179,12 @@ document.getElementById('net-invite').addEventListener('click', () => {
   const bot=(tgBotUsername||'YOUR_BOT_USERNAME').replace(/^@/,'');
   const link=`https://t.me/${bot}?startapp=${encodeURIComponent(room)}`;
   if(tgApp && tgApp.openTelegramLink) tgApp.openTelegramLink(link);
-  else if(navigator.share) navigator.share({title:'CS 1.6 Classic Arena',text:`Комната ${room}. Сервер: ${decodeURIComponent(server)}`,url:link}).catch(()=>{});
-  else if(navigator.clipboard) navigator.clipboard.writeText(link).then(()=>netStatus('Ссылка-приглашение скопирована. Передайте друзьям также адрес сервера: '+decodeURIComponent(server)));
+  else {
+    const inviteText=`Комната ${room}. Сервер: ${decodeURIComponent(server)}. Присоединяйся: ${link}`;
+    const shareUrl=`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(inviteText)}`;
+    const win=window.open(shareUrl,'_blank','noopener');
+    if(!win && navigator.clipboard) navigator.clipboard.writeText(inviteText).then(()=>netStatus('Открой Telegram и отправь друзьям: '+link));
+  }
 });
 function netPublish(now){
   if(!netConnected) return;
