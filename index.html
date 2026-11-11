@@ -211,7 +211,7 @@ function applyControlsMode(){
   document.body.classList.toggle('mob-visible', isMobile);
   document.getElementById('controls-desc').innerHTML = isMobile
     ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Игра работает в горизонтальной ориентации.'
-    : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">Ctrl / C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие<br><span class="kbd">+</span>/<span class="kbd">−</span> союзники ± · <span class="kbd">Ctrl +</span>/<span class="kbd">Ctrl −</span> противники ±';
+    : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие<br><span class="kbd">+</span>/<span class="kbd">−</span> союзники ± · <span class="kbd">Ctrl +</span>/<span class="kbd">Ctrl −</span> противники ±<br>⚠ Приседай на <span class="kbd">C</span>: Ctrl+W браузер закрывает вкладку';
   const landBtn = document.getElementById('btn-land');
   if (landBtn) landBtn.style.display = isMobile ? 'block' : 'none';
   const modeBtn = document.getElementById('btn-controls-mode');
