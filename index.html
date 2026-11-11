@@ -21,7 +21,14 @@
   #hp{position:absolute;left:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000}
   #wname{position:absolute;left:20px;bottom:58px;font-size:18px;font-weight:700;text-shadow:0 1px 3px #000;color:#ffd76e;pointer-events:auto;cursor:pointer}
   #ammo{position:absolute;right:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000}
-  #msg{position:absolute;left:50%;top:35%;transform:translateX(-50%);font-size:28px;font-weight:800;text-shadow:0 2px 6px #000;text-align:center;color:#ffcc00}
+  #msg{position:absolute;left:50%;top:35%;transform:translateX(-50%);font-size:28px;font-weight:800;text-shadow:0 2px 6px #000;text-align:center;color:#ffcc00;opacity:0}
+  #msg.anim{animation:msgFloat 2.2s ease-out forwards}
+  @keyframes msgFloat{
+    0%{opacity:0;transform:translate(-50%,16px)}
+    10%{opacity:1;transform:translate(-50%,0)}
+    55%{opacity:1;transform:translate(-50%,-30px)}
+    100%{opacity:0;transform:translate(-50%,-110px)}
+  }
   #err{position:fixed;left:10px;top:10px;font-size:14px;color:#ff4444;text-shadow:0 1px 2px #000;white-space:pre-wrap;z-index:99999;background:rgba(0,0,0,0.9);padding:12px;border-radius:6px;max-width:500px;border:1px solid #ff4444;display:none}
   
   .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(0,10,25,.96);color:#fff;text-align:center;z-index:10;pointer-events:auto}
@@ -795,7 +802,13 @@ function dropW(px,py,y){ const nm=GW_NAMES[_gi++%GW_NAMES.length]; groundWeapons
 
 const msgEl = document.getElementById('msg');
 const dmgIndEl = document.getElementById('dmg-indicator');
-function showMsg(t){ msgEl.textContent = t; msgT = 1.8; }
+function showMsg(t){
+  msgEl.textContent = t;
+  msgT = 0;
+  msgEl.classList.remove('anim');
+  void msgEl.offsetWidth;
+  msgEl.classList.add('anim');
+}
 
 function getActiveWeapon(){ return inventory[activeSlot]; }
 
