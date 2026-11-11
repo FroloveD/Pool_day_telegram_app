@@ -1083,8 +1083,9 @@ function shoot(){
 
   const ip = [P.x + dx*bestT, oy + dy*bestT, P.z + dz*bestT];
   if(hitBot){
-    const hs = ip[1] >= hitBot.y + 1.44;
-    const dmg = hs ? w.dmg * 4 : w.dmg;
+    const inHead = ip[1] >= hitBot.y + 1.44;
+    const hs = inHead && Math.hypot(ip[0] - hitBot.x, ip[2] - hitBot.z) < 0.16;
+    const dmg = inHead ? w.dmg * (hs ? 4 : 2) : w.dmg;
     const dealt = Math.min(dmg, hitBot.hp), dead = hitBot.hp - dmg <= 0;
     popDamage(ip[0], ip[1] + 0.15, ip[2], dealt, dead, hs); hitMarker(dead); beep(hs ? 'head' : 'hit');
     if(netConnected && !netIsHost){
@@ -1099,8 +1100,9 @@ function shoot(){
       }
     }
   } else if(hitPlayer){
-    const hs = ip[1] >= hitPlayer.y + 1.44;
-    const dealt = hs ? w.dmg * 4 : w.dmg;
+    const inHead = ip[1] >= hitPlayer.y + 1.44;
+    const hs = inHead && Math.hypot(ip[0] - hitPlayer.x, ip[2] - hitPlayer.z) < 0.16;
+    const dealt = inHead ? w.dmg * (hs ? 4 : 2) : w.dmg;
     netSend({type:'damage',target:hitPlayer.netId,amount:dealt,attackerTeam:P.team});
     popDamage(ip[0]+dx*bestT,ip[1]+dy*bestT,ip[2]+dz*bestT,dealt,false,hs); hitMarker(false); beep(hs ? 'head' : 'hit');
   } else if(bestT < 1e8 && (hitC || hitPlane)){
