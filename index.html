@@ -157,6 +157,12 @@
     <div class="net-row"><button type="button" id="net-invite" style="display:none">Пригласить в комнату</button></div>
     <div id="net-status">Выберите локальный или облачный сервер. Для локального режима хост запускает START_INTERNET.bat.</div>
   </section>
+  <div class="net-row" style="justify-content:center"><select id="bot-difficulty" aria-label="Сложность ботов" style="max-width:280px">
+    <option value="easy">🟢 Боты: лёгкие</option>
+    <option value="normal">🟡 Боты: обычные</option>
+    <option value="hard">🟠 Боты: сложные</option>
+    <option value="expert">🔴 Боты: хардкор</option>
+  </select></div>
   <button type="button" onclick="startBuyingProcess(event)">Играть →</button>
   <button type="button" id="btn-controls-mode" style="background:#34506b" onclick="toggleControlsMode(event)"></button>
   <button type="button" id="btn-land" style="display:none;background:#34506b" onclick="goLandscape(event)">⛶ Полный экран · горизонтально</button>
@@ -1300,6 +1306,26 @@ function canManageBots(){
   if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
   return !netConnected || netIsHost;
 }
+
+const DIFF_PRESETS = {
+  easy:   { vision: 28, scan: 0.30, react: [0.85, 0.65], cadence: [0.70, 0.90], hitBase: 0.45, hitFall: 0.030, mem: 2.5, dmgMul: 0.60, spd: 3.9 },
+  normal: { vision: 40, scan: 0.20, react: [0.50, 0.40], cadence: [0.50, 0.70], hitBase: 0.70, hitFall: 0.020, mem: 4.0, dmgMul: 0.80, spd: 4.2 },
+  hard:   { vision: 52, scan: 0.14, react: [0.25, 0.20], cadence: [0.32, 0.40], hitBase: 0.85, hitFall: 0.012, mem: 6.0, dmgMul: 0.95, spd: 4.5 },
+  expert: { vision: 65, scan: 0.10, react: [0.12, 0.12], cadence: [0.22, 0.28], hitBase: 0.95, hitFall: 0.008, mem: 9.0, dmgMul: 1.10, spd: 4.8 }
+};
+let botDiff = 'normal';
+try { const d = localStorage.getItem('bot-difficulty'); if (d && DIFF_PRESETS[d]) botDiff = d; } catch (e) {}
+function diff(){ return DIFF_PRESETS[botDiff]; }
+const botDiffEl = document.getElementById('bot-difficulty');
+if(botDiffEl){
+  botDiffEl.value = botDiff;
+  botDiffEl.addEventListener('change', () => {
+    if (DIFF_PRESETS[botDiffEl.value]) {
+      botDiff = botDiffEl.value;
+      try { localStorage.setItem('bot-difficulty', botDiff); } catch (e) {}
+    }
+  });
+}
 updateBotPanel();
 
 let mouseDown = false;
@@ -1555,13 +1581,14 @@ function update(dt, t){
     collide(P, 0.4);
 
     if(!netConnected || netIsHost){
+    const D = diff();
     bots.forEach(b => {
       if(!b.alive) return;
       // --- поиск ближайшей видимой цели: игроки и боты в противоположной команде ---
       b.losT = (b.losT || 0) - dt;
       if(b.tgt && b.tgt.ref !== 'P' && !b.tgt.ref.alive) b.tgt = null;
       if(b.losT <= 0){
-        b.losT = 0.2; b.tgt = null; let bestD = 40;
+        b.losT = D.scan; b.tgt = null; let bestD = D.vision;
         const consider = (tx, ty, tz, ref) => {
           const dx = tx - b.x, dy = ty - (b.y + 1.5), dz = tz - b.z, d = Math.hypot(dx, dy, dz) || 1;
           if(d >= bestD) return;
@@ -1576,8 +1603,8 @@ function update(dt, t){
         bots.forEach(o => { if(o.alive && o.team !== b.team) consider(o.x, o.y + 1.5, o.z, o); });
         if(b.tgt){
           const t0 = b.tgt.ref === 'P' ? P : b.tgt.ref;
-          b.memT = 4; b.lastX = t0.x; b.lastZ = t0.z;
-          if(!b.wasSees) b.shootT = Math.max(b.shootT, 0.5 + Math.random()*0.4); // время реакции
+          b.memT = D.mem; b.lastX = t0.x; b.lastZ = t0.z;
+          if(!b.wasSees) b.shootT = Math.max(b.shootT, D.react[0] + Math.random()*D.react[1]); // время реакции
         }
         b.wasSees = !!b.tgt;
       }
@@ -1612,7 +1639,7 @@ function update(dt, t){
         if(b.strT <= 0){ b.strT = 0.6 + Math.random()*1.2; b.strDir = Math.random() < 0.5 ? 1 : -1; }
         const fwd = pd > b.hold + 1 ? 1 : pd < b.hold - 2 ? -0.6 : 0;
         mvx = fx*fwd - fz*b.strDir*0.8; mvz = fz*fwd + fx*b.strDir*0.8;
-        spd = 4.2;
+        spd = D.spd;
       } else {
         if(b.memT > 0){ b.tx = b.lastX; b.tz = b.lastZ; }
         const dx = b.tx - b.x, dz = b.tz - b.z, dist = Math.hypot(dx, dz);
@@ -1654,9 +1681,9 @@ function update(dt, t){
       if(b.flash > 0) b.flash -= dt;
       if(b.shootT <= 0){
         if(sees && pd < 38){
-          b.shootT = 0.5 + Math.random()*0.7; b.flash = 0.07; b.kick = 1;
-          const bd = Math.max(6, Math.min(14, (b.weapon.dmg || 30)*0.28));
-          if(Math.random() < Math.max(0.2, 0.7 - pd*0.02)){
+          b.shootT = D.cadence[0] + Math.random()*D.cadence[1]; b.flash = 0.07; b.kick = 1;
+          const bd = Math.max(6, Math.min(18, (b.weapon.dmg || 30)*0.28*D.dmgMul));
+          if(Math.random() < Math.max(0.25, D.hitBase - pd*D.hitFall)){
             if(T.ref === 'P') playerHit(bd*0.8, b.x, b.z);
             else if(T.ref.netId) netSend({type:'damage',target:T.ref.netId,amount:bd*0.8,attackerTeam:b.team});
             else {
