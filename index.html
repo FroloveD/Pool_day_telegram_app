@@ -184,7 +184,7 @@ function applyControlsMode(){
   document.body.classList.toggle('mob-visible', isMobile);
   document.getElementById('controls-desc').innerHTML = isMobile
     ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Игра работает в горизонтальной ориентации.'
-    : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">Ctrl / C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие';
+    : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">Ctrl / C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие<br><span class="kbd">+</span>/<span class="kbd">−</span> союзники ± · <span class="kbd">Ctrl +</span>/<span class="kbd">Ctrl −</span> противники ±';
   const landBtn = document.getElementById('btn-land');
   if (landBtn) landBtn.style.display = isMobile ? 'block' : 'none';
   const modeBtn = document.getElementById('btn-controls-mode');
@@ -846,6 +846,14 @@ window.addEventListener('keydown', e => {
   if(e.code === 'Digit2') switchSlot(2);
   if(e.code === 'Digit3') switchSlot(3);
   if(e.code === 'KeyE') tryPickupWeapon();
+  if((e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') && canManageBots()){
+    e.preventDefault();
+    if(e.ctrlKey || e.metaKey) addBot('blue'); else addBot('red');
+  }
+  if((e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') && canManageBots()){
+    e.preventDefault();
+    if(e.ctrlKey || e.metaKey) removeBot('blue'); else removeBot('red');
+  }
 });
 
 window.addEventListener('keyup', e => {
@@ -1276,6 +1284,11 @@ if(botPanel){
 }
 function updateBotPanel(){
   if(botPanel) botPanel.classList.toggle('show', !netConnected || netIsHost);
+}
+function canManageBots(){
+  const tag = document.activeElement && document.activeElement.tagName;
+  if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
+  return !netConnected || netIsHost;
 }
 updateBotPanel();
 
