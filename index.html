@@ -1077,7 +1077,8 @@ function shoot(){
   const oy = P.y + 1.65;
   const cpb = Math.cos(P.pitch), dbx = Math.sin(P.yaw)*cpb, dby = Math.sin(P.pitch), dbz = -Math.cos(P.yaw)*cpb;
   const distMul = 1 + Math.min(2.5, rayDist(P.x, oy, P.z, dbx, dby, dbz) / 18);
-  const sp = w.spread * (zoomed ? 0.5 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.75 : 1.0) * (w.auto ? 1.0 : 0.85) * distMul;
+  const firstShot = spreadHeat <= 0 && !P.moving && !P.airborne;
+  const sp = firstShot ? 0 : w.spread * (zoomed ? 0.5 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.75 : 1.0) * (w.auto ? 1.0 : 0.85) * distMul;
   const yawJ = (Math.random()*2-1)*sp, pitJ = (Math.random()*2-1)*sp*0.5;
   const yaw2 = P.yaw + yawJ, pit2 = Math.max(-1.55, Math.min(1.55, P.pitch + pitJ));
   const cp2 = Math.cos(pit2);
