@@ -1004,6 +1004,17 @@ function drawDecals(){
   });
 }
 
+// Дистанция до ближайшей преграды по направлению прицела (для дальнобойного штрафа разброса)
+function rayDist(ox, oy, oz, dx, dy, dz){
+  let best = 1e9;
+  bots.forEach(b => { if(!b.alive || b.team === P.team) return; const t = rayAABB(ox,oy,oz,dx,dy,dz,{x:b.x,y:b.y+0.9,z:b.z,sx:0.8,sy:1.8,sz:0.8}); if(t !== null && t < best) best = t; });
+  netPlayers.forEach(p => { if(!p.alive || p.team === P.team) return; const t = rayAABB(ox,oy,oz,dx,dy,dz,{x:p.x,y:p.y+0.9,z:p.z,sx:0.8,sy:1.8,sz:0.8}); if(t !== null && t < best) best = t; });
+  colliders.forEach(c => { const t = rayAABB(ox,oy,oz,dx,dy,dz,c); if(t !== null && t < best) best = t; });
+  if(dy < -1e-4){ const t = -oy/dy; if(t > 0 && t < best) best = t; }
+  else if(dy > 1e-4){ const t = (H - oy)/dy; if(t > 0 && t < best) best = t; }
+  return Math.min(best, 60);
+}
+
 function shoot(){
   if(!playing || !roundActive || reloading > 0) return;
   const w = getActiveWeapon();
@@ -1058,13 +1069,15 @@ function shoot(){
   recoilOffset = 0.08;
   beep('shot');
 
-  const sp = w.spread * (zoomed ? 0.5 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.75 : 1.0) * (w.auto ? 1.0 : 0.85);
+  const oy = P.y + 1.65;
+  const cpb = Math.cos(P.pitch), dbx = Math.sin(P.yaw)*cpb, dby = Math.sin(P.pitch), dbz = -Math.cos(P.yaw)*cpb;
+  const distMul = 1 + Math.min(2.5, rayDist(P.x, oy, P.z, dbx, dby, dbz) / 18);
+  const sp = w.spread * (zoomed ? 0.5 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.75 : 1.0) * (w.auto ? 1.0 : 0.85) * distMul;
   const yawJ = (Math.random()*2-1)*sp, pitJ = (Math.random()*2-1)*sp*0.5;
   const yaw2 = P.yaw + yawJ, pit2 = Math.max(-1.55, Math.min(1.55, P.pitch + pitJ));
   const cp2 = Math.cos(pit2);
   const dx = Math.sin(yaw2)*cp2, dy = Math.sin(pit2), dz = -Math.cos(yaw2)*cp2;
 
-  const oy = P.y + 1.65;
   let bestT = 1e9, hitBot = null, hitC = null, hitPlane = 0;
   bots.forEach(b => {
     if(!b.alive || b.team === P.team) return;
