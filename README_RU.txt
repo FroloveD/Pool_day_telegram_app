@@ -11,7 +11,7 @@ FY_POOL_DAY — TELEGRAM MINI APP + MULTIPLAYER
 - Есть кнопка приглашения в комнату через Telegram.
 - Добавлен минимальный Telegram-бот: /start отправляет кнопку открытия Mini App.
 - Добавлен webhook endpoint /telegram/webhook и скрипт установки webhook.
-- Добавлена конфигурация Render для облачного WebSocket-сервера.
+- Добавлена конфигурация Fly.io (fly.toml + Dockerfile) для облачного WebSocket-сервера.
 
 СТРУКТУРА
 ---------
@@ -20,7 +20,7 @@ telegram-config.js         Публичные настройки URL облак�
 server/server.js           WebSocket-сервер + Telegram webhook
 server/set-webhook.js      Установка webhook бота в Telegram
 server/.env.example        Список переменных окружения
-render.yaml                Шаблон облачного развёртывания
+fly.toml / Dockerfile       Шаблон облачного развёртывания на Fly.io
 
 ЧАСТЬ 1. СОЗДАТЬ TELEGRAM-БОТА
 ------------------------------
@@ -39,42 +39,44 @@ Firebase Hosting, GitHub Pages с HTTPS, Netlify или аналогичный.
 
 Откройте telegram-config.js и заполните:
   window.GAME_CONFIG = {
-    cloudWsUrl: "wss://ИМЯ-ВАШЕГО-СЕРВЕРА.onrender.com",
+    cloudWsUrl: "wss://ИМЯ-ВАШЕГО-ПРИЛОЖЕНИЯ.fly.dev",
     botUsername: "username_вашего_бота"
   };
 
 После этого опубликуйте файлы повторно. В BotFather укажите тот же HTTPS URL Mini App.
 
-ЧАСТЬ 3. ОБЛАЧНЫЙ СЕРВЕР (ПОСТОЯННЫЙ АДРЕС)
+ЧАСТЬ 3. ОБЛАЧНЫЙ СЕРВЕР НА FLY.IO (ПОСТОЯННЫЙ АДРЕС)
 --------------------------------------------
 1. Создайте репозиторий GitHub и загрузите содержимое этой папки.
-2. В Render выберите New → Blueprint и подключите репозиторий с render.yaml.
-   Либо создайте Node Web Service вручную:
-     Root Directory: server
-     Build Command: npm install
-     Start Command: npm start
-3. Добавьте переменные окружения сервиса:
-     BOT_TOKEN       = токен от BotFather
-     WEBAPP_URL      = публичный HTTPS URL Mini App
-     WEBHOOK_SECRET  = случайная строка из букв, цифр, _ и -
-4. После публикации получите URL сервера, например:
-     https://fy-pool-day-game-server.onrender.com
-   WebSocket URL будет:
-     wss://fy-pool-day-game-server.onrender.com
-5. В server/ установите зависимости: npm install.
-   Установите webhook, передав переменные окружения и PUBLIC_SERVER_URL:
-     PowerShell:
-       $env:BOT_TOKEN="ТОКЕН"
-       $env:WEBHOOK_SECRET="СЕКРЕТ"
-       $env:PUBLIC_SERVER_URL="https://ИМЯ-СЕРВЕРА.onrender.com"
-       npm run set-webhook
-   После успешного ответа Telegram бот будет отвечать на /start.
-6. В telegram-config.js пропишите облачный wss:// URL и username бота.
+2. Установите Fly CLI: https://fly.io/docs/flyctl/install/
+3. В папке проекта выполните:
+     fly auth login
+     fly launch --no-deploy
+   Fly определит fly.toml (приложение fy-pool-day, регион waw).
+   Если имя занято, Fly предложит другое — используйте его во всех шагах ниже.
+4. Задайте секреты (вместо fy-pool-day подставьте имя вашего приложения):
+     fly secrets set BOT_TOKEN="ТОКЕН_ОТ_BOTFATHER"
+     fly secrets set WEBAPP_URL="https://ИМЯ-СТАТИКИ.github.io/РЕПО/"
+     fly secrets set WEBHOOK_SECRET="случайная_строка_из_букв_цифр"
+     fly secrets set PUBLIC_SERVER_URL="https://fy-pool-day.fly.dev"
+5. Задеплойте:
+     fly deploy
+6. После деплоя сервер сам установит Telegram-webhook (нужны все 4 секрета).
+   Проверка: https://fy-pool-day.fly.dev/health должен вернуть JSON с ok:true.
+   WebSocket URL для telegram-config.js:
+     wss://fy-pool-day.fly.dev
+7. В telegram-config.js пропишите:
+     cloudWsUrl: "wss://fy-pool-day.fly.dev"
+     botUsername: "username_вашего_бота"
+   и опубликуйте index.html + telegram-config.js на HTTPS-хостинге (см. ЧАСТЬ 2).
 
-Для облачной игры игрокам достаточно выбрать «Облачный сервер» и подключиться.
-Облачный сервер работает независимо от компьютера создателя комнаты. На бесплатных
-тарифах некоторые платформы могут останавливать неактивные сервисы; первый запуск
-после простоя может быть медленным. Для постоянной доступности нужен тариф без сна.
+Мини-приложение (index.html и telegram-config.js) размещается отдельно на
+GitHub Pages: Settings → Pages → Deploy from branch → main → / (root).
+
+Для игры игрокам достаточно выбрать «Облачный сервер» и подключиться.
+Приложение Fly засыпает при простое и просыпается на первый запрос; первый
+запуск после простоя может быть медленным. Для постоянной доступности без
+задержек увеличьте min_machines_running в fly.toml (платно по секундам).
 
 ЧАСТЬ 4. ЛОКАЛЬНЫЙ ХОСТ — ИГРА ЧЕРЕЗ ИНТЕРНЕТ
 ---------------------------------------------

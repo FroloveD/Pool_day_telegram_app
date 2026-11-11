@@ -191,6 +191,21 @@ server.listen(PORT, "0.0.0.0", async () => {
   console.log(`fy_pool_day relay listening on :${PORT}`);
   console.log(`Локальный адрес: ws://localhost:${PORT}`);
 
+  if (BOT_TOKEN && WEBAPP_URL && WEBHOOK_SECRET && process.env.PUBLIC_SERVER_URL) {
+    try {
+      const base = process.env.PUBLIC_SERVER_URL.replace(/\/$/, "");
+      const r = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setWebhook`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: `${base}/telegram/webhook`, secret_token: WEBHOOK_SECRET, allowed_updates: ["message"], drop_pending_updates: true })
+      });
+      const data = await r.json();
+      console.log(data.ok ? `Webhook установлен: ${base}/telegram/webhook` : `Ошибка установки webhook: ${data.description}`);
+    } catch (err) {
+      console.error("Не удалось установить webhook:", err.message);
+    }
+  }
+
   if (INTERNET_MODE) {
     try {
       const localtunnel = require("localtunnel");
