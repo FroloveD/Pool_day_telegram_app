@@ -146,6 +146,7 @@
     <div id="net-status">Выберите локальный или облачный сервер. Для локального режима хост запускает START_INTERNET.bat.</div>
   </section>
   <button type="button" onclick="startBuyingProcess(event)">Играть →</button>
+  <button type="button" id="btn-controls-mode" style="background:#34506b" onclick="toggleControlsMode(event)"></button>
   <button type="button" id="btn-land" style="display:none;background:#34506b" onclick="goLandscape(event)">⛶ Полный экран · горизонтально</button>
   <div id="mob-opts"><span>Если управление ведёт себя наоборот:</span>
     <label><input type="checkbox" data-k="invJoyY"> джойстик ↕</label> <label><input type="checkbox" data-k="invJoyX"> джойстик ↔</label>
@@ -159,19 +160,32 @@
 </div>
 
 <script>
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 800 || 'ontouchstart' in window;
+const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
+let isMobile = (isTouchDevice || window.innerWidth < 800) && !(typeof matchMedia === 'function' && matchMedia('(pointer:fine)').matches && matchMedia('(hover:hover)').matches);
+try { const savedMode = localStorage.getItem('controls-mode'); if (savedMode) isMobile = savedMode === 'touch'; } catch (e) {}
 // Телефон/планшет (не настольный ПК): для них ориентация строго горизонтальная
 const isHandheld = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
   || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
   || (typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches && !matchMedia('(hover:hover)').matches);
 let orientBlocked = false;
-if(isMobile){
-  document.body.classList.add('mob-visible');
-  document.getElementById('controls-desc').innerHTML = 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Игра работает в горизонтальной ориентации.';
-  document.getElementById('btn-land').style.display = 'block';
-} else {
-  document.getElementById('controls-desc').innerHTML = '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">Ctrl / C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие';
+function applyControlsMode(){
+  document.body.classList.toggle('mob-visible', isMobile);
+  document.getElementById('controls-desc').innerHTML = isMobile
+    ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Игра работает в горизонтальной ориентации.'
+    : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">Ctrl / C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие';
+  const landBtn = document.getElementById('btn-land');
+  if (landBtn) landBtn.style.display = isMobile ? 'block' : 'none';
+  const modeBtn = document.getElementById('btn-controls-mode');
+  if (modeBtn) modeBtn.textContent = isMobile ? '⌨ Переключить на клавиатуру + мышь' : '📱 Переключить на сенсорное управление';
+  try { localStorage.setItem('controls-mode', isMobile ? 'touch' : 'kbm'); } catch (e) {}
 }
+function toggleControlsMode(ev){
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  isMobile = !isMobile;
+  if (!isMobile && document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
+  applyControlsMode();
+}
+applyControlsMode();
 
 function goLandscape(ev){
   if(ev) ev.stopPropagation();
