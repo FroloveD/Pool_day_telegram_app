@@ -1046,14 +1046,14 @@ function shoot(){
 
   ammo--;
   fireCd = w.delay;
+  const crouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
+  const moveMul = P.airborne ? 4.0 : P.moving ? 1.8 : 1.0;
+  const bloomPow = (w.type === 'rifle' || w.type === 'mg') ? 2.0 : 1.0;
   spreadHeat = Math.min(1, spreadHeat + (w.auto ? (0.03 + 0.4 * spreadHeat * spreadHeat) * bloomPow : 0.3));
   P.pitch = Math.min(1.5, P.pitch + 0.014);
   recoilOffset = 0.08;
   beep('shot');
 
-  const crouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
-  const moveMul = P.airborne ? 4.0 : P.moving ? 1.8 : 1.0;
-  const bloomPow = (w.type === 'rifle' || w.type === 'mg') ? 2.0 : 1.0;
   const sp = w.spread * (zoomed ? 0.35 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.65 : 1.0) * (w.auto ? 1.0 : 0.85);
   const yawJ = (Math.random()*2-1)*sp, pitJ = (Math.random()*2-1)*sp*0.5;
   const yaw2 = P.yaw + yawJ, pit2 = Math.max(-1.55, Math.min(1.55, P.pitch + pitJ));
