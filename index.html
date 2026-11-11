@@ -59,6 +59,7 @@
   .tag i{display:block;height:3px;margin:2px auto 0;background:#5f5;border-radius:2px;width:36px}
   .dpop{position:absolute;transform:translate(-50%,-50%);font-weight:800;font-size:18px;color:#ffd76e;text-shadow:0 1px 3px #000,0 0 5px #000;pointer-events:none;white-space:nowrap}
   .dpop.kill{color:#ff5a4a;font-size:24px}
+  .dpop.hs{color:#ff9a3d;font-size:23px}
   #hitm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 4px #000;opacity:0;transition:opacity .15s;pointer-events:none}
   #bot-panel{position:fixed;right:12px;top:12px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto}
   #bot-panel.show{display:flex}
@@ -885,9 +886,9 @@ function ensureAudio(){
 function beep(type){
   if(!AC) return;
   const o = AC.createOscillator(), g = AC.createGain();
-  o.type = type === 'shot' ? 'square' : type === 'hit' ? 'sine' : 'sawtooth';
-  o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'hit' ? 800 : 100;
-  const dur = type === 'shot' ? 0.07 : 0.12;
+  o.type = type === 'shot' ? 'square' : (type === 'hit' || type === 'head') ? 'sine' : 'sawtooth';
+  o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'head' ? 1250 : type === 'hit' ? 800 : 100;
+  const dur = type === 'shot' ? 0.07 : type === 'head' ? 0.18 : 0.12;
   g.gain.setValueAtTime(type === 'shot' ? 0.08 : 0.1, AC.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
   o.connect(g).connect(AC.destination);
@@ -926,10 +927,10 @@ function hitMarker(kill){
   setTimeout(() => { hitmEl.style.transition = 'opacity .2s'; hitmEl.style.opacity = 0; }, 90);
 }
 const dmgPops = [];
-function popDamage(x, y, z, val, kill){
+function popDamage(x, y, z, val, kill, hs){
   const el = document.createElement('div');
-  el.className = 'dpop' + (kill ? ' kill' : '');
-  el.textContent = (kill ? '☠ ' : '') + Math.round(val);
+  el.className = 'dpop' + (kill ? ' kill' : '') + (hs ? ' hs' : '');
+  el.textContent = (hs ? '💥 HEADSHOT ' : kill ? '☠ ' : '') + Math.round(val);
   document.getElementById('tags').appendChild(el);
   dmgPops.push({el: el, x: x, y: y, z: z, dx: (Math.random()-0.5)*0.5, born: performance.now()});
   if(dmgPops.length > 14){ const o = dmgPops.shift(); o.el.remove(); }
@@ -1059,22 +1060,25 @@ function shoot(){
 
   const ip = [P.x + dx*bestT, oy + dy*bestT, P.z + dz*bestT];
   if(hitBot){
-    const dealt = Math.min(w.dmg, hitBot.hp), dead = hitBot.hp - w.dmg <= 0;
-    popDamage(ip[0], ip[1] + 0.15, ip[2], dealt, dead); hitMarker(dead); beep('hit');
+    const hs = ip[1] >= hitBot.y + 1.35;
+    const dmg = hs ? w.dmg * 4 : w.dmg;
+    const dealt = Math.min(dmg, hitBot.hp), dead = hitBot.hp - dmg <= 0;
+    popDamage(ip[0], ip[1] + 0.15, ip[2], dealt, dead, hs); hitMarker(dead); beep(hs ? 'head' : 'hit');
     if(netConnected && !netIsHost){
-      netSend({type:'botHit',index:bots.indexOf(hitBot),amount:w.dmg,attackerTeam:P.team});
+      netSend({type:'botHit',index:bots.indexOf(hitBot),amount:dmg,attackerTeam:P.team});
     } else {
-      hitBot.hp -= w.dmg;
+      hitBot.hp -= dmg;
       if(hitBot.hp <= 0){
         killBot(hitBot); if(P.team==='red') scoreMe++; else scoreBots++;
         netSend({type:'frag',team:P.team});
-        showMsg('Фраг! +1 (' + w.name + ')');
+        showMsg(hs ? '💥 HEADSHOT! +1 (' + w.name + ')' : 'Фраг! +1 (' + w.name + ')');
       }
     }
   } else if(hitPlayer){
-    const dealt=w.dmg;
+    const hs = ip[1] >= hitPlayer.y + 1.35;
+    const dealt = hs ? w.dmg * 4 : w.dmg;
     netSend({type:'damage',target:hitPlayer.netId,amount:dealt,attackerTeam:P.team});
-    popDamage(ip[0]+dx*bestT,ip[1]+dy*bestT,ip[2]+dz*bestT,dealt,false); hitMarker(false); beep('hit');
+    popDamage(ip[0]+dx*bestT,ip[1]+dy*bestT,ip[2]+dz*bestT,dealt,false,hs); hitMarker(false); beep(hs ? 'head' : 'hit');
   } else if(bestT < 1e8 && (hitC || hitPlane)){
     addDecal(ip, hitC, hitPlane);
   }
