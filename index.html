@@ -13,10 +13,12 @@
   html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;user-select:none;touch-action:none}
   #c{width:100%;height:100%;display:block;cursor:crosshair}
   #hud{position:fixed;inset:0;pointer-events:none;color:#fff;z-index:2}
-  #cross{position:absolute;left:50%;top:50%;width:18px;height:18px;transform:translate(-50%,-50%)}
-  #cross:before,#cross:after{content:"";position:absolute;background:#00ff00;box-shadow:0 0 3px #000}
-  #cross:before{left:8px;top:0;width:2px;height:18px}
-  #cross:after{top:8px;left:0;height:2px;width:18px}
+  #cross{position:absolute;left:50%;top:50%;width:0;height:0;transform:translate(-50%,-50%);--g:9px}
+  #cross i{position:absolute;background:#00ff00;box-shadow:0 0 3px #000}
+  #cross i:nth-child(1){left:-1px;top:calc(-1*var(--g) - 8px);width:2px;height:8px}
+  #cross i:nth-child(2){left:-1px;top:var(--g);width:2px;height:8px}
+  #cross i:nth-child(3){top:-1px;left:calc(-1*var(--g) - 8px);height:2px;width:8px}
+  #cross i:nth-child(4){top:-1px;left:var(--g);height:2px;width:8px}
   #stats{position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:20px;font-weight:700;text-shadow:0 1px 3px #000;background:rgba(0,0,0,.5);padding:4px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1)}
   #hp{position:absolute;left:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000}
   #wname{position:absolute;left:20px;bottom:58px;font-size:18px;font-weight:700;text-shadow:0 1px 3px #000;color:#ffd76e;pointer-events:auto;cursor:pointer}
@@ -121,7 +123,7 @@
 <div id="err"></div>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div id="cross"></div>
+  <div id="cross"><i></i><i></i><i></i><i></i></div>
   <div id="dmg-indicator"><div id="dmg-arrow"></div></div>
   <div id="stats">Красные 0 : 0 Синие</div>
   <div id="hp">❤ 100</div>
@@ -1034,15 +1036,16 @@ function shoot(){
 
   ammo--;
   fireCd = w.delay;
-  spreadHeat = Math.min(1, spreadHeat + (w.auto ? 0.1 : 0.3));
+  spreadHeat = Math.min(1, spreadHeat + (w.auto ? (0.03 + 0.4 * spreadHeat * spreadHeat) * bloomPow : 0.3));
   P.pitch = Math.min(1.5, P.pitch + 0.014);
   recoilOffset = 0.08;
   beep('shot');
 
   const crouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
   const moveMul = P.airborne ? 4.0 : P.moving ? 1.8 : 1.0;
-  const sp = w.spread * (zoomed ? 0.35 : 1.0) * (1 + spreadHeat * 2.2) * moveMul * (crouching && !P.airborne ? 0.65 : 1.0) * (w.auto ? 1.0 : 0.85);
-  const yawJ = (Math.random()*2-1)*sp, pitJ = (Math.random()*2-1)*sp*0.6;
+  const bloomPow = (w.type === 'rifle' || w.type === 'mg') ? 2.0 : 1.0;
+  const sp = w.spread * (zoomed ? 0.35 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.65 : 1.0) * (w.auto ? 1.0 : 0.85);
+  const yawJ = (Math.random()*2-1)*sp, pitJ = (Math.random()*2-1)*sp*0.5;
   const yaw2 = P.yaw + yawJ, pit2 = Math.max(-1.55, Math.min(1.55, P.pitch + pitJ));
   const cp2 = Math.cos(pit2);
   const dx = Math.sin(yaw2)*cp2, dy = Math.sin(pit2), dz = -Math.cos(yaw2)*cp2;
@@ -1070,7 +1073,7 @@ function shoot(){
 
   const ip = [P.x + dx*bestT, oy + dy*bestT, P.z + dz*bestT];
   if(hitBot){
-    const hs = ip[1] >= hitBot.y + 1.35;
+    const hs = ip[1] >= hitBot.y + 1.44;
     const dmg = hs ? w.dmg * 4 : w.dmg;
     const dealt = Math.min(dmg, hitBot.hp), dead = hitBot.hp - dmg <= 0;
     popDamage(ip[0], ip[1] + 0.15, ip[2], dealt, dead, hs); hitMarker(dead); beep(hs ? 'head' : 'hit');
@@ -1085,7 +1088,7 @@ function shoot(){
       }
     }
   } else if(hitPlayer){
-    const hs = ip[1] >= hitPlayer.y + 1.35;
+    const hs = ip[1] >= hitPlayer.y + 1.44;
     const dealt = hs ? w.dmg * 4 : w.dmg;
     netSend({type:'damage',target:hitPlayer.netId,amount:dealt,attackerTeam:P.team});
     popDamage(ip[0]+dx*bestT,ip[1]+dy*bestT,ip[2]+dz*bestT,dealt,false,hs); hitMarker(false); beep(hs ? 'head' : 'hit');
@@ -1597,6 +1600,7 @@ function groundHeight(x, z){
 
 const statsEl = document.getElementById('stats'), hpEl = document.getElementById('hp'), ammoEl = document.getElementById('ammo');
 const armorEqEl = document.getElementById('armor-equip');
+const crossEl = document.getElementById('cross');
 let last = performance.now();
 
 function frame(now){
@@ -1812,6 +1816,7 @@ function update(dt, t){
   }
   const rt = Math.max(0, roundTimeLeft);
   statsEl.textContent = `Красные ${scoreMe} : ${scoreBots} Синие` + (matchLive ? ` · ${Math.floor(rt/60)}:${String(Math.floor(rt%60)).padStart(2,'0')}` : '');
+  crossEl.style.setProperty('--g', (9 + spreadHeat * 26).toFixed(1) + 'px');
   hpEl.textContent = `❤ ${Math.ceil(P.hp)}` + (P.armor ? ` 🛡${P.armor === 2 ? '+200%' : '+100%'}` : '');
   hpEl.style.color = P.armor === 2 ? '#7fc4ff' : P.hp > 50 ? '#fff' : P.hp > 25 ? '#ffb347' : '#ff5555';
   
