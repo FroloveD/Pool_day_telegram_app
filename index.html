@@ -870,6 +870,7 @@ function cycleWeaponSlot(){
 // НАДЕЖНАЯ СИСТЕМА ОБРАБОТКИ ПРЫЖКА И КЛАВИШ
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
+  if(playing && (e.ctrlKey || e.metaKey)) e.preventDefault();
   if(e.code === 'Space') {
     keys['Space'] = true;
     e.preventDefault();
@@ -896,6 +897,8 @@ window.addEventListener('keyup', e => {
     keys['Space'] = false;
   }
 });
+
+window.addEventListener('wheel', e => { if(playing && e.ctrlKey) e.preventDefault(); }, {passive:false});
 
 let AC = null;
 function ensureAudio(){
