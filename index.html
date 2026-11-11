@@ -824,7 +824,7 @@ const keys = {};
 let ammo = 0, reloading = 0, fireCd = 0, zoomed = false;
 let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
 let roundTimeLeft = 300, roundOver = false, matchLive = false, roundWinner = null;
-let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0;
+let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0, burstCount = 0;
 let statFrags = 0, statDeaths = 0;
 let buyingPhase = 1;
 
@@ -1050,6 +1050,7 @@ function shoot(){
   const moveMul = P.airborne ? 4.0 : P.moving ? 1.8 : 1.0;
   const bloomPow = (w.type === 'rifle' || w.type === 'mg') ? 2.0 : 1.0;
   spreadHeat = Math.min(1, spreadHeat + (w.auto ? (0.03 + 0.4 * spreadHeat * spreadHeat) * bloomPow : 0.3));
+  burstCount = spreadHeat > 0.02 ? burstCount + 1 : 1;
   P.pitch = Math.min(1.5, P.pitch + 0.014);
   recoilOffset = 0.08;
   beep('shot');
@@ -1827,6 +1828,7 @@ function update(dt, t){
     }
     if(fireCd > 0) fireCd -= dt;
     spreadHeat = Math.max(0, spreadHeat - dt * 1.4);
+    if(spreadHeat <= 0) burstCount = 0;
     const activeW = getActiveWeapon();
     if(mouseDown && activeW && activeW.auto && reloading <= 0) shoot();
     recoilOffset = Math.max(0, recoilOffset - dt*0.5);
@@ -1864,7 +1866,7 @@ function update(dt, t){
   }
   const rt = Math.max(0, roundTimeLeft);
   statsEl.textContent = `Красные ${scoreMe} : ${scoreBots} Синие` + (matchLive ? ` · ${Math.floor(rt/60)}:${String(Math.floor(rt%60)).padStart(2,'0')}` : '');
-  crossEl.style.setProperty('--g', (9 + spreadHeat * 26).toFixed(1) + 'px');
+  crossEl.style.setProperty('--g', ((9 + spreadHeat * 26) * (burstCount > 3 ? 1.5 : 1)).toFixed(1) + 'px');
   hpEl.textContent = `❤ ${Math.ceil(P.hp)}` + (P.armor ? ` 🛡${P.armorMax ? Math.round(P.armorHp / P.armorMax * 100) : 0}%` : '');
   hpEl.style.color = P.armor === 2 ? '#7fc4ff' : P.armor && P.armorHp <= 0 ? '#888' : P.hp > 50 ? '#fff' : P.hp > 25 ? '#ffb347' : '#ff5555';
   
