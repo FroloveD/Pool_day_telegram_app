@@ -162,7 +162,9 @@
     <option value="normal">🟡 Боты: обычные</option>
     <option value="hard">🟠 Боты: сложные</option>
     <option value="expert">🔴 Боты: хардкор</option>
+    <option value="custom">⚙ Боты: свои (настройки)</option>
   </select></div>
+  <div id="bot-custom-panel" style="display:none;width:100%;max-width:430px;margin:0 auto;flex-direction:column;gap:6px;font-size:12px;text-align:left;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:10px 14px"></div>
   <button type="button" onclick="startBuyingProcess(event)">Играть →</button>
   <button type="button" id="btn-controls-mode" style="background:#34506b" onclick="toggleControlsMode(event)"></button>
   <button type="button" id="btn-land" style="display:none;background:#34506b" onclick="goLandscape(event)">⛶ Полный экран · горизонтально</button>
@@ -1314,15 +1316,55 @@ const DIFF_PRESETS = {
   expert: { vision: 65, scan: 0.10, react: [0.12, 0.12], cadence: [0.22, 0.28], hitBase: 0.95, hitFall: 0.008, mem: 9.0, dmgMul: 1.10, spd: 4.8 }
 };
 let botDiff = 'normal';
-try { const d = localStorage.getItem('bot-difficulty'); if (d && DIFF_PRESETS[d]) botDiff = d; } catch (e) {}
-function diff(){ return DIFF_PRESETS[botDiff]; }
+try { const d = localStorage.getItem('bot-difficulty'); if (d && (DIFF_PRESETS[d] || d === 'custom')) botDiff = d; } catch (e) {}
+const CUSTOM_DEFAULTS = { vision: 40, react: 0.5, cadence: 0.5, hitBase: 0.7, hitFall: 0.02, mem: 4, dmgMul: 0.8, spd: 4.2 };
+let customCfg = Object.assign({}, CUSTOM_DEFAULTS);
+try { Object.assign(customCfg, JSON.parse(localStorage.getItem('bot-difficulty-custom') || '{}')); } catch (e) {}
+function saveCustomCfg(){ try { localStorage.setItem('bot-difficulty-custom', JSON.stringify(customCfg)); } catch (e) {} }
+function diff(){
+  if (botDiff !== 'custom') return DIFF_PRESETS[botDiff];
+  const c = customCfg;
+  return { vision: c.vision, scan: Math.max(0.08, c.react * 0.4), react: [c.react, c.react * 0.6], cadence: [c.cadence, c.cadence * 0.6], hitBase: c.hitBase, hitFall: c.hitFall, mem: c.mem, dmgMul: c.dmgMul, spd: c.spd };
+}
+function buildCustomPanel(){
+  const panel = document.getElementById('bot-custom-panel');
+  if(!panel) return;
+  const rows = [
+    ['vision',   'Зрение, м',                    10,   80,  1],
+    ['react',    'Реакция, с',                   0.1,  1.5, 0.05],
+    ['cadence',  'Пауза между выстрелами, с',    0.15, 1.2, 0.05],
+    ['hitBase',  'Точность',                     0.05, 1,   0.05],
+    ['hitFall',  'Падение точности с дистанцией',0,    0.05,0.002],
+    ['mem',      'Память о цели, с',             0,    15,  0.5],
+    ['dmgMul',   'Урон',                         0.1,  2,   0.05],
+    ['spd',      'Скорость в бою',               3,    6,   0.1]
+  ];
+  panel.innerHTML = '';
+  rows.forEach(([k, label, min, max, step]) => {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px';
+    const name = document.createElement('span'); name.style.flex = '1'; name.textContent = label;
+    const val = document.createElement('b'); val.style.cssText = 'min-width:48px;text-align:right;color:#ffd76e';
+    const upd = () => { val.textContent = (k === 'hitBase' || k === 'dmgMul') ? Math.round(customCfg[k] * 100) + '%' : String(Math.round(customCfg[k] * 100) / 100); };
+    const inp = document.createElement('input'); inp.type = 'range'; inp.min = min; inp.max = max; inp.step = step; inp.value = customCfg[k]; inp.style.flex = '1';
+    inp.addEventListener('input', () => { customCfg[k] = parseFloat(inp.value); upd(); saveCustomCfg(); });
+    upd();
+    row.append(name, inp, val);
+    panel.appendChild(row);
+  });
+}
 const botDiffEl = document.getElementById('bot-difficulty');
 if(botDiffEl){
   botDiffEl.value = botDiff;
+  const customPanel = document.getElementById('bot-custom-panel');
+  const applyDiffVisibility = () => { if (customPanel) customPanel.style.display = botDiff === 'custom' ? 'flex' : 'none'; };
+  buildCustomPanel();
+  applyDiffVisibility();
   botDiffEl.addEventListener('change', () => {
-    if (DIFF_PRESETS[botDiffEl.value]) {
+    if (DIFF_PRESETS[botDiffEl.value] || botDiffEl.value === 'custom') {
       botDiff = botDiffEl.value;
       try { localStorage.setItem('bot-difficulty', botDiff); } catch (e) {}
+      applyDiffVisibility();
     }
   });
 }
