@@ -63,6 +63,13 @@
   .dpop.kill{color:#ff5a4a;font-size:24px}
   .dpop.hs{color:#ff9a3d;font-size:23px}
   #armor-equip{position:absolute;left:50%;bottom:24%;transform:translateX(-50%);font-weight:800;font-size:16px;color:#7fc4ff;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:none;display:none;white-space:nowrap}
+  #roundover-board{margin:10px auto 4px;max-width:420px;width:92%;font-size:14px;text-align:left}
+  #roundover-board table{width:100%;border-collapse:collapse}
+  #roundover-board th{font-size:11px;color:#8fa8bf;text-align:left;padding:3px 6px;border-bottom:1px solid #3a5a78}
+  #roundover-board td{padding:3px 6px;border-bottom:1px solid #22344a}
+  #roundover-board tr.me td{font-weight:800}
+  #roundover-board .tred{color:#ff6b6b}#roundover-board .tblue{color:#6bb8ff}
+  #roundover-board td:nth-child(2),#roundover-board td:nth-child(3),#roundover-board th:nth-child(2),#roundover-board th:nth-child(3){text-align:right}
   #hitm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 4px #000;opacity:0;transition:opacity .15s;pointer-events:none}
   #bot-panel{position:fixed;right:12px;top:12px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto}
   #bot-panel.show{display:flex}
@@ -187,6 +194,7 @@
 <div id="roundover" class="overlay" style="display:none">
   <h1 id="roundover-title"></h1>
   <p id="roundover-score"></p>
+  <div id="roundover-board"></div>
   <button type="button" onclick="backToTeamSelect(event)">К выбору команды</button>
 </div>
 
@@ -816,7 +824,8 @@ const keys = {};
 let ammo = 0, reloading = 0, fireCd = 0, zoomed = false;
 let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
 let roundTimeLeft = 300, roundOver = false, matchLive = false, roundWinner = null;
-let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0;
+let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0;
+let statFrags = 0, statDeaths = 0;
 let buyingPhase = 1;
 
 const GW_NAMES=['AK-47','M4A1','AWP','MP5 Navy','P90','Famas','Desert Eagle','Scout','XM1014','M249','Galil','USP45','UMP45','Glock-18'];
@@ -895,10 +904,10 @@ function ensureAudio(){
 function beep(type){
   if(!AC) return;
   const o = AC.createOscillator(), g = AC.createGain();
-  o.type = type === 'shot' ? 'square' : (type === 'hit' || type === 'head') ? 'sine' : 'sawtooth';
-  o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'head' ? 1250 : type === 'hit' ? 800 : 100;
-  const dur = type === 'shot' ? 0.07 : type === 'head' ? 0.18 : 0.12;
-  g.gain.setValueAtTime(type === 'shot' ? 0.08 : 0.1, AC.currentTime);
+  o.type = type === 'shot' ? 'square' : (type === 'hit' || type === 'head') ? 'sine' : (type === 'step' || type === 'jump' || type === 'land') ? 'triangle' : 'sawtooth';
+  o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'head' ? 1250 : type === 'hit' ? 800 : type === 'step' ? 85 + Math.random()*35 : type === 'jump' ? 220 : type === 'land' ? 60 : 100;
+  const dur = type === 'shot' ? 0.07 : type === 'head' ? 0.18 : type === 'step' ? 0.05 : type === 'jump' ? 0.08 : type === 'land' ? 0.1 : 0.12;
+  g.gain.setValueAtTime(type === 'shot' ? 0.08 : type === 'step' ? 0.03 : type === 'jump' ? 0.04 : type === 'land' ? 0.06 : 0.1, AC.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
   o.connect(g).connect(AC.destination);
   o.start(); o.stop(AC.currentTime + dur + 0.04);
@@ -1010,12 +1019,13 @@ function shoot(){
     if(hitBot){
       const dealt = Math.min(w.dmg, hitBot.hp), dead = hitBot.hp - w.dmg <= 0;
       popDamage(hitBot.x, hitBot.y + 1.9, hitBot.z, dealt, dead); hitMarker(dead); beep('hit');
-      if(netConnected && !netIsHost) netSend({type:'botHit',index:bots.indexOf(hitBot),amount:w.dmg,attackerTeam:P.team});
+      if(netConnected && !netIsHost) netSend({type:'botHit',index:bots.indexOf(hitBot),amount:w.dmg,attackerTeam:P.team,attacker:netId});
       else {
         hitBot.hp -= w.dmg;
         if(hitBot.hp <= 0){
           killBot(hitBot); if(P.team==='red') scoreMe++; else scoreBots++;
-          if(netConnected) netSend({type:'frag',team:P.team});
+          statFrags++;
+          if(netConnected) netSend({type:'frag',team:P.team,by:netId});
           showMsg('Фраг ножом! +1');
         }
       }
@@ -1078,12 +1088,13 @@ function shoot(){
     const dealt = Math.min(dmg, hitBot.hp), dead = hitBot.hp - dmg <= 0;
     popDamage(ip[0], ip[1] + 0.15, ip[2], dealt, dead, hs); hitMarker(dead); beep(hs ? 'head' : 'hit');
     if(netConnected && !netIsHost){
-      netSend({type:'botHit',index:bots.indexOf(hitBot),amount:dmg,attackerTeam:P.team});
+      netSend({type:'botHit',index:bots.indexOf(hitBot),amount:dmg,attackerTeam:P.team,attacker:netId});
     } else {
       hitBot.hp -= dmg;
       if(hitBot.hp <= 0){
         killBot(hitBot); if(P.team==='red') scoreMe++; else scoreBots++;
-        netSend({type:'frag',team:P.team});
+        statFrags++;
+        netSend({type:'frag',team:P.team,by:netId});
         showMsg(hs ? '💥 HEADSHOT! +1 (' + w.name + ')' : 'Фраг! +1 (' + w.name + ')');
       }
     }
@@ -1121,8 +1132,19 @@ function tryPickupWeapon(){
   }
 }
 
+function applyPlayerDamage(dmg){
+  const lvl = P.armor || 0;
+  const frac = lvl && P.armorMax ? Math.max(0, P.armorHp / P.armorMax) : 0;
+  const taken = dmg / (1 + lvl * frac);
+  if(lvl && P.armorHp > 0){
+    P.armorHp = Math.max(0, P.armorHp - (dmg - taken));
+    if(P.armorHp <= 0) showMsg('🛡 Броня разбита!');
+  }
+  return taken;
+}
+
 function playerHit(dmg, attackerX, attackerZ){
-  P.hp -= dmg / (1 + (P.armor || 0));
+  P.hp -= applyPlayerDamage(dmg);
   beep('hurt');
   const dx = attackerX - P.x; const dz = attackerZ - P.z;
   dmgAngle = (Math.atan2(dx, -dz) - P.yaw) * (180 / Math.PI);
@@ -1132,7 +1154,8 @@ function playerHit(dmg, attackerX, attackerZ){
     if(P.team==='red') scoreBots++; else scoreMe++;
     if(netConnected) netSend({type:'frag',team:P.team==='red'?'blue':'red'});
     const sp = getTeamSpawn(P.team==='blue', P);
-    P.hp = 100; P.x = sp[0]; P.y = 0.1; P.z = sp[1]; P.vy = 0; P.armor = 0;
+    P.hp = 100; P.x = sp[0]; P.y = 0.1; P.z = sp[1]; P.vy = 0; P.armor = 0; P.armorHp = 0; P.armorMax = 0;
+    statDeaths++;
     showMsg('Вы погибли! Новый раунд');
     roundActive = false;
     openBuyMenu();
@@ -1207,10 +1230,10 @@ function netConnect(){
         if(m.id === netId) return;
         let p = netPlayers.get(m.id);
         if(!p){
-          p = {netId:m.id, name:m.name || 'Игрок', team:m.team || 'blue', model:BOT_MODELS[0], weapon:WEAPONS.find(w=>w.name==='AK-47'), alive:true, hp:100,maxHp:100,y:0,vy:0,rotY:0,yawS:0,pitchS:0,aim:1,walkT:0,spd:0,vx:0,vz:0,kick:0,flash:0,diedAt:0};
+          p = {netId:m.id, name:m.name || 'Игрок', team:m.team || 'blue', model:BOT_MODELS[0], weapon:WEAPONS.find(w=>w.name==='AK-47'), alive:true, hp:100,maxHp:100,y:0,vy:0,rotY:0,yawS:0,pitchS:0,aim:1,walkT:0,spd:0,vx:0,vz:0,kick:0,flash:0,diedAt:0,fr:0,de:0};
           netPlayers.set(m.id,p);
         }
-        Object.assign(p,{name:m.name||p.name,team:m.team||p.team,x:m.x||0,y:m.y||0,z:m.z||0,yaw:m.yaw||0,rotY:m.yaw||0,yawS:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0});
+        Object.assign(p,{name:m.name||p.name,team:m.team||p.team,x:m.x||0,y:m.y||0,z:m.z||0,yaw:m.yaw||0,rotY:m.yaw||0,yawS:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
       } else if(m.type === 'peerLeft'){
         netPlayers.delete(m.id);
       } else if(m.type === 'hostChanged'){
@@ -1222,23 +1245,28 @@ function netConnect(){
         if(bots.length > (m.bots||[]).length) bots.length = (m.bots||[]).length;
         if(m.score){ scoreMe=m.score.red||0; scoreBots=m.score.blue||0; }
         if(typeof m.timeLeft === 'number') roundTimeLeft = Math.max(0, m.timeLeft);
+        if(m.armor){ armorPickup.active = !!m.armor.active; armorPickup.respawnAt = m.armor.respawnAt || 0; }
         if(m.roundOver && !roundOver){ roundOver = true; roundActive = false; matchLive = false; roundWinner = m.winner || 'draw'; showRoundOver(roundWinner); }
         else if(!m.roundOver && roundOver){ roundOver = false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
       } else if(m.type === 'damage' && m.target === netId){
-        P.hp = Math.max(0, P.hp - (m.amount||0)/(1 + (P.armor||0))); beep('hurt'); dmgTimer=0.8;
+        P.hp = Math.max(0, P.hp - applyPlayerDamage(m.amount||0)); beep('hurt'); dmgTimer=0.8;
         if(P.hp <= 0){
           netSend({type:'frag',team:m.attackerTeam});
-          const sp=getTeamSpawn(P.team==='blue',P); P.x=sp[0];P.z=sp[1];P.y=0.1;P.vy=0;P.hp=100;P.armor=0;
+          const sp=getTeamSpawn(P.team==='blue',P); P.x=sp[0];P.z=sp[1];P.y=0.1;P.vy=0;P.hp=100;P.armor=0;P.armorHp=0;P.armorMax=0;
+          statDeaths++;
           showMsg('Вы выбыли · респаун');
         }
+      } else if(m.type === 'armorTaken' && netIsHost){
+        armorPickup.active = false; armorPickup.respawnAt = performance.now() + ARMOR_RESPAWN_MS;
       } else if(m.type === 'botHit' && netIsHost){
         const b=bots[m.index];
         if(b && b.alive){
           b.hp -= m.amount||0;
-          if(b.hp <= 0){ killBot(b); if(m.attackerTeam==='red') scoreMe++; else scoreBots++; netSend({type:'frag',team:m.attackerTeam}); }
+          if(b.hp <= 0){ killBot(b); if(m.attackerTeam==='red') scoreMe++; else scoreBots++; netSend({type:'frag',team:m.attackerTeam,by:m.attacker}); }
         }
       } else if(m.type === 'frag'){
         if(m.team==='red') scoreMe++; else if(m.team==='blue') scoreBots++;
+        if(m.by && m.by === netId) statFrags++;
       } else if(m.type === 'notice') netStatus(m.text||'Серверное сообщение');
     });
     netSocket.addEventListener('close', () => {
@@ -1270,11 +1298,11 @@ function netPublish(now){
   if(now-netLastSend>50){
     netLastSend=now;
     const w=getActiveWeapon();
-    netSend({type:'player',x:P.x,y:P.y,z:P.z,yaw:P.yaw,pitch:P.pitch,hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed});
+    netSend({type:'player',x:P.x,y:P.y,z:P.z,yaw:P.yaw,pitch:P.pitch,hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths});
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw'});
+    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt}});
   }
 }
 
@@ -1416,7 +1444,7 @@ const wmenuTitle = document.getElementById('wmenu-title');
 function beginRoundFromMenu(){
   wmenuEl.style.display = 'none';
   roundActive = true;
-  if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = 300; }
+  if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = 300; statFrags = 0; statDeaths = 0; }
   switchSlot(1);
   if(!isMobile){ try{ cv.requestPointerLock(); }catch(e){} }
 }
@@ -1451,16 +1479,16 @@ function buildMenuForPhase(){
     const mkArmor = (label, lvl, sub) => {
       const b = document.createElement('button'); b.className = 'wbtn'; b.type = 'button';
       b.innerHTML = '<b>' + label + '</b><span>' + sub + '</span>';
-      b.addEventListener('click', (ev) => { ev.stopPropagation(); P.armor = lvl; beginRoundFromMenu(); });
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); P.armor = lvl; P.armorHp = lvl ? 60 : 0; P.armorMax = lvl ? 60 : 0; beginRoundFromMenu(); });
       wgrid.appendChild(b);
     };
-    mkArmor('🛡 Бронежилет', 1, 'урон ÷2 · скорость −33%');
+    mkArmor('🛡 Бронежилет', 1, 'урон ÷2 · скорость −33% · прочность 60');
     mkArmor('🚫 Без брони', 0, 'полная скорость');
   }
 }
 
 function openBuyMenu(){
-  P.armor = 0;
+  P.armor = 0; P.armorHp = 0; P.armorMax = 0;
   buyingPhase = 1;
   buildMenuForPhase();
   wmenuEl.style.display = 'flex';
@@ -1491,6 +1519,17 @@ function showRoundOver(winner){
   else if(winner === 'blue'){ title.textContent = '🔵 Синие победили!'; title.style.color = '#6bb8ff'; }
   else { title.textContent = '⚖ Ничья!'; title.style.color = '#ffd76e'; }
   document.getElementById('roundover-score').textContent = `Счёт: Красные ${scoreMe} : ${scoreBots} Синие · время раунда вышло`;
+  const board = document.getElementById('roundover-board');
+  if(board){
+    const rows = [{name: netName + ' (вы)', team: P.team, fr: statFrags, de: statDeaths, me: true}];
+    netPlayers.forEach(p => rows.push({name: p.name, team: p.team, fr: p.fr || 0, de: p.de || 0, me: false}));
+    rows.sort((a, b) => b.fr - a.fr || a.de - b.de);
+    let h = '<table><tr><th>Игрок</th><th>Фраги</th><th>Смерти</th></tr>';
+    rows.forEach(r => {
+      h += `<tr${r.me ? ' class="me"' : ''}><td class="${r.team === 'red' ? 'tred' : 'tblue'}">${String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
+    });
+    board.innerHTML = h + '</table>';
+  }
   el.style.display = 'flex';
 }
 function backToTeamSelect(ev){
@@ -1649,15 +1688,20 @@ function update(dt, t){
         P.vy = 11.5; // выталкивает на бортик
       } else if(P.y <= g + 0.05 && P.vy <= 0){
         P.vy = 8.5;  // стандартный прыжок с земли
+        beep('jump');
       }
     }
 
     P.vy -= (inPool ? 14 : 24) * dt;
     P.y += P.vy * dt;
 
-    if(P.y < g){ P.y = g; P.vy = 0; }
+    if(P.y < g){ if(P.vy < -7) beep('land'); P.y = g; P.vy = 0; }
     P.airborne = !inPool && (P.vy > 0.5 || P.y > g + 0.05);
     collide(P, 0.4);
+    if(P.moving && !P.airborne && P.hp > 0){
+      stepT -= dt;
+      if(stepT <= 0){ stepT = inPool ? 0.5 : 0.38; beep('step'); }
+    } else if(stepT < 0.15) stepT = 0.15;
 
     if(!netConnected || netIsHost){
     const D = diff();
@@ -1786,14 +1830,16 @@ function update(dt, t){
     recoilOffset = Math.max(0, recoilOffset - dt*0.5);
     P.hp = Math.min(100, P.hp + 1.5*dt);
 
-    if(!armorPickup.active && performance.now() >= armorPickup.respawnAt) armorPickup.active = true;
+    if((!netConnected || netIsHost) && !armorPickup.active && performance.now() >= armorPickup.respawnAt) armorPickup.active = true;
     const nearArmor = armorPickup.active && P.armor < 2 && Math.hypot(P.x - armorPickup.x, P.z - armorPickup.z) < 1.5 && P.y < -1.2;
     if(nearArmor){
       armorEquipT += dt;
       armorEqEl.style.display = 'block';
       armorEqEl.textContent = '🛡 Надеваю суперброню… ' + Math.min(100, Math.round(armorEquipT / ARMOR_EQUIP_TIME * 100)) + '%';
       if(armorEquipT >= ARMOR_EQUIP_TIME){
-        P.armor = 2; armorPickup.active = false; armorPickup.respawnAt = performance.now() + ARMOR_RESPAWN_MS;
+        P.armor = 2; P.armorHp = 120; P.armorMax = 120;
+        armorPickup.active = false; armorPickup.respawnAt = performance.now() + ARMOR_RESPAWN_MS;
+        if(netConnected && !netIsHost) netSend({type:'armorTaken'});
         armorEquipT = 0; armorEqEl.style.display = 'none';
         showMsg('🛡 Суперброня +200% надета!'); beep('head');
       }
@@ -1817,8 +1863,8 @@ function update(dt, t){
   const rt = Math.max(0, roundTimeLeft);
   statsEl.textContent = `Красные ${scoreMe} : ${scoreBots} Синие` + (matchLive ? ` · ${Math.floor(rt/60)}:${String(Math.floor(rt%60)).padStart(2,'0')}` : '');
   crossEl.style.setProperty('--g', (9 + spreadHeat * 26).toFixed(1) + 'px');
-  hpEl.textContent = `❤ ${Math.ceil(P.hp)}` + (P.armor ? ` 🛡${P.armor === 2 ? '+200%' : '+100%'}` : '');
-  hpEl.style.color = P.armor === 2 ? '#7fc4ff' : P.hp > 50 ? '#fff' : P.hp > 25 ? '#ffb347' : '#ff5555';
+  hpEl.textContent = `❤ ${Math.ceil(P.hp)}` + (P.armor ? ` 🛡${P.armorMax ? Math.round(P.armorHp / P.armorMax * 100) : 0}%` : '');
+  hpEl.style.color = P.armor === 2 ? '#7fc4ff' : P.armor && P.armorHp <= 0 ? '#888' : P.hp > 50 ? '#fff' : P.hp > 25 ? '#ffb347' : '#ff5555';
   
   const w = getActiveWeapon();
   document.getElementById('wname').textContent = w ? w.name + ` [Слот ${activeSlot}]` : '';

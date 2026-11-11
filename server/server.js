@@ -140,6 +140,8 @@ wss.on("connection", (ws) => {
       p.name = safeName(msg.name);
       p.weapon = String(msg.weapon || "").slice(0, 32);
       p.alive = msg.alive !== false;
+      p.fr = Math.max(0, Math.min(9999, Number(msg.fr) | 0));
+      p.de = Math.max(0, Math.min(9999, Number(msg.de) | 0));
       broadcast(room, { type: "player", ...p }, id);
     } else if (msg.type === "botState") {
       if (room.hostId !== id || !Array.isArray(msg.bots)) return;
@@ -156,7 +158,8 @@ wss.on("connection", (ws) => {
         score: { red: num(msg.score && msg.score.red), blue: num(msg.score && msg.score.blue) },
         timeLeft: Math.max(0, Math.min(3600, num(msg.timeLeft))),
         roundOver: !!msg.roundOver,
-        winner: msg.winner === 'blue' ? 'blue' : msg.winner === 'red' ? 'red' : 'draw'
+        winner: msg.winner === 'blue' ? 'blue' : msg.winner === 'red' ? 'red' : 'draw',
+        armor: { active: !!(msg.armor && msg.armor.active), respawnAt: Math.max(0, Math.min(600000, num(msg.armor && msg.armor.respawnAt))) }
       };
       broadcast(room, room.botState, id);
     } else if (msg.type === "botHit") {
@@ -166,7 +169,8 @@ wss.on("connection", (ws) => {
           type: "botHit",
           index: Math.max(0, Math.min(31, Number(msg.index) | 0)),
           amount: Math.max(0, Math.min(200, num(msg.amount))),
-          attackerTeam: msg.attackerTeam === "blue" ? "blue" : "red"
+          attackerTeam: msg.attackerTeam === "blue" ? "blue" : "red",
+          attacker: String(msg.attacker || "").slice(0, 40)
         });
       }
     } else if (msg.type === "damage") {
@@ -178,7 +182,12 @@ wss.on("connection", (ws) => {
         attackerTeam: msg.attackerTeam === "blue" ? "blue" : "red"
       });
     } else if (msg.type === "frag") {
-      broadcast(room, { type: "frag", team: msg.team === "blue" ? "blue" : "red" }, id);
+      broadcast(room, { type: "frag", team: msg.team === "blue" ? "blue" : "red", by: String(msg.by || "").slice(0, 40) }, id);
+    } else if (msg.type === "armorTaken") {
+      if (room.hostId && room.hostId !== id) {
+        const host = room.peers.get(room.hostId);
+        if (host) send(host.ws, { type: "armorTaken" });
+      }
     }
   });
 
