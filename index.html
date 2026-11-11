@@ -245,6 +245,11 @@ window.onerror = function(msg, url, line){
   showError('JS Error: ' + msg + '\nLine: ' + line);
 };
 
+// Ctrl+W браузер перехватить не может — во время матча спрашиваем подтверждение закрытия
+window.addEventListener('beforeunload', e => {
+  if(playing && roundActive){ e.preventDefault(); e.returnValue = ''; }
+});
+
 let gl, pr, loc = {}, TEX = {};
 const cv = document.getElementById('c');
 
