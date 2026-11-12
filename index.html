@@ -1791,7 +1791,6 @@ function update(dt, t){
         b.lx = b.x; b.lz = b.z; b.stuckT = 0;
       }
       if(sees){
-        b.rotY = Math.atan2(pdx, pdz);
         const fx = pdx/pd, fz = pdz/pd;
         b.strT = (b.strT || 0) - dt;
         if(b.strT <= 0){ b.strT = 0.6 + Math.random()*1.2; b.strDir = Math.random() < 0.5 ? 1 : -1; }
@@ -1802,7 +1801,7 @@ function update(dt, t){
         if(b.memT > 0){ b.tx = b.lastX; b.tz = b.lastZ; }
         const dx = b.tx - b.x, dz = b.tz - b.z, dist = Math.hypot(dx, dz);
         if(dist < 1.5){ b.memT = 0; pickNav(b); }
-        else { mvx = dx/dist; mvz = dz/dist; b.rotY = Math.atan2(dx, dz); }
+        else { mvx = dx/dist; mvz = dz/dist; }
       }
       if(b.sideT > 0){
         b.sideT -= dt;
@@ -1810,15 +1809,29 @@ function update(dt, t){
       }
       const ox = b.x, oz = b.z;
       const ml = Math.hypot(mvx, mvz);
-      if(ml > 0.01){
-        const nx = b.x + mvx/ml*spd*dt, nz = b.z + mvz/ml*spd*dt;
+      const wvx = ml > 0.01 ? mvx/ml*spd : 0, wvz = ml > 0.01 ? mvz/ml*spd : 0;
+      const av = Math.min(1, dt*(ml > 0.01 ? 9 : 13));
+      b.cvx = (b.cvx || 0) + (wvx - (b.cvx || 0))*av;
+      b.cvz = (b.cvz || 0) + (wvz - (b.cvz || 0))*av;
+      {
+        const nx = b.x + b.cvx*dt, nz = b.z + b.cvz*dt;
         if(inAnyPool(nx, nz, 0.7)){
           b.sideT = 0.5; b.sideDir = Math.random() < 0.5 ? 1 : -1;
           if(!sees) pickNav(b);
+          b.cvx *= -0.4; b.cvz *= -0.4;
         } else { b.x = nx; b.z = nz; }
       }
       collide(b, 0.45);
       b.y = groundHeight(b.x, b.z);
+
+      let wantRot = b.rotY;
+      if(sees) wantRot = Math.atan2(pdx, pdz);
+      else if(Math.hypot(b.cvx, b.cvz) > 0.5) wantRot = Math.atan2(b.cvx, b.cvz);
+      const rr = (((wantRot - b.rotY + Math.PI) % (2*Math.PI)) + 2*Math.PI) % (2*Math.PI) - Math.PI;
+      const rotStep = rr*Math.min(1, dt*(sees ? 14 : 7));
+      b.rotY += rotStep;
+      const rollTarget = Math.max(-0.14, Math.min(0.14, -rotStep/Math.max(dt, 1e-4)*0.045));
+      b.rollS = (b.rollS || 0) + (rollTarget - (b.rollS || 0))*Math.min(1, dt*6);
 
       // --- анимация: скорость, фаза шага, плавный поворот, прицеливание, отдача ---
       const kk = Math.min(1, dt*8);
@@ -1994,13 +2007,14 @@ function drawBot(b, now){
   let root = mul(mT(b.x, b.y, b.z), mRy(yaw));
   if(dead){ const t = Math.min(1, (now - b.diedAt)/600), e = t*t*(3 - 2*t); root = mul(mul(root, mT(0, 0.13*e, 0)), mRx(-1.5*e)); }
   const sp = b.spd || 0, amp = dead ? 0 : Math.min(1, sp/4.2), ph = b.walkT || 0, bob = 0.025*amp*Math.cos(2*ph);
+  const breath = dead ? 0 : (1 - Math.min(1, amp*3)) * Math.sin(now*0.0016 + (b.seed || 0)*7) * 0.008;
   let dirx = 0, dirz = 1;
   if(sp > 0.3){ const lx = cs*b.vx - sn*b.vz, lz = sn*b.vx + cs*b.vz, l = Math.hypot(lx, lz) || 1; dirx = lx/l; dirz = lz/l; }
   const torso = b.team === 'red' ? m.torso.map((c, i) => c*0.5 + [0.6, 0.15, 0.15][i]*0.5) : m.torso;
   curKind = null;
 
   // ноги
-  const hipY = 0.92*hh + bob, L1 = 0.46*hh, L2 = 0.46*hh;
+  const hipY = 0.92*hh + bob + breath, L1 = 0.46*hh, L2 = 0.46*hh;
   for(let i = 0; i < 2; i++){
     const sd = i ? 1 : -1, p = ph + (i ? Math.PI : 0), s = Math.sin(p), c = Math.cos(p);
     let tx = sd*0.1*k, ty = 0.07, tz = 0;
@@ -2016,7 +2030,9 @@ function drawBot(b, now){
 
   // корпус
   const twist = Math.sin(ph)*0.1*amp, lean = 0.05 + 0.05*amp - (b.kick || 0)*0.05;
-  const C = mul(mul(mul(root, mT(0, hipY + 0.06*hh, 0)), mRy(twist)), mRx(lean));
+  const latV = cs*(b.vx || 0) - sn*(b.vz || 0);
+  const roll = Math.max(-0.2, Math.min(0.2, (b.rollS || 0) - latV*0.035*amp));
+  const C = mul(mul(mul(mul(root, mT(0, hipY + 0.06*hh, 0)), mRy(twist)), mRx(lean)), mRz(roll));
   dm('b', mul(C, mul(mT(0, 0.16*hh, 0), mS(0.36*k, 0.28*hh, 0.22))), torso);
   dm('b', mul(C, mul(mT(0, 0.36*hh, 0), mS(0.41*k, 0.3*hh, 0.25))), torso);
   dm('b', mul(C, mul(mT(0, 0.34*hh, 0.012), mS(0.44*k, 0.32*hh, 0.28))), m.vest);
