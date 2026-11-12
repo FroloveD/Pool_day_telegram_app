@@ -90,6 +90,8 @@
   #roundover-board td:nth-child(2),#roundover-board td:nth-child(3),#roundover-board th:nth-child(2),#roundover-board th:nth-child(3){text-align:right}
   #hitm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 4px #000;opacity:0;transition:opacity .15s;pointer-events:none}
   #bot-panel{position:fixed;right:12px;top:12px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto}
+  /* на мобильных опускаем панель ниже HUD (hp/патроны занимают верх экрана) */
+  .mob-visible #bot-panel{top:74px}
   #bot-panel.show{display:flex}
   #bot-panel button{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;font-size:14px;font-weight:700;padding:4px 10px;cursor:pointer;touch-action:manipulation}
   #bot-panel button:hover{background:rgba(60,120,180,.6)}
@@ -168,8 +170,11 @@
   <div id="armor-equip"></div>
   <div id="tags"></div>
   <div id="hitm">✕</div>
-  <div id="bot-panel"></div>
 </div>
+<!-- Панель ботов — вне #hud: #hud (z-index:2) создаёт контекст наложения, и на мобильных
+     зона обзора #touch-look (z-index:5) перехватывала касания по панели. Как прямой потомок
+     body с z-index:6 панель снова выше мобильного управления -->
+<div id="bot-panel"></div>
 
 <div id="mobile-controls">
   <div id="joystick-zone"><div id="joy-base"><div id="joystick-knob"></div></div></div>
@@ -292,7 +297,9 @@ function showError(txt){
 }
 
 window.onerror = function(msg, url, line, col, err){
-  if(msg === 'Script error' && !line) return;
+  // Chrome маскирует ошибки чужих кросс-доменных скриптов (telegram-web-app.js) как
+  // "Script error." с точкой и line=0 — такие ошибки не наши и игре не мешают, скрываем
+  if(!line && /script error/i.test(String(msg))) return;
   if(/is not supported in version/.test(msg)) return;
   let t = 'JS Error: ' + msg + '\nLine: ' + line + (col ? ':' + col : '');
   if(err && err.stack) t += '\n' + String(err.stack).split('\n').slice(0,4).join('\n');
