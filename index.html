@@ -198,6 +198,13 @@
     <option value="expert">🔴 Боты: хардкор</option>
     <option value="custom">⚙ Боты: свои (настройки)</option>
   </select></div>
+  <div class="net-row" style="justify-content:center"><select id="round-time" aria-label="Время раунда" style="max-width:280px">
+    <option value="120">⏱ Раунд: 2 минуты</option>
+    <option value="180">⏱ Раунд: 3 минуты</option>
+    <option value="300" selected>⏱ Раунд: 5 минут</option>
+    <option value="600">⏱ Раунд: 10 минут</option>
+    <option value="900">⏱ Раунд: 15 минут</option>
+  </select></div>
   <div id="bot-custom-panel" style="display:none;width:100%;max-width:430px;margin:0 auto;flex-direction:column;gap:6px;font-size:12px;text-align:left;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:10px 14px"></div>
   <button type="button" onclick="startBuyingProcess(event)">Играть →</button>
   <button type="button" id="btn-controls-mode" style="background:#34506b" onclick="toggleControlsMode(event)"></button>
@@ -344,6 +351,7 @@ function initGL(){
     uniform float alpha;
     uniform sampler2D tex;
     uniform float useTex;
+    uniform float shin;
     void main(){
       vec3 n = normalize(vn);
       vec3 L = normalize(vec3(0.4, 1.0, 0.3));
@@ -356,7 +364,12 @@ function initGL(){
         vec4 t = texture2D(tex, vuv);
         base = col * t.rgb;
       }
-      vec3 c = mix(base * (0.45 + 0.6 * d) + rim, sky, fog * 0.7);
+      // Материалы: блик по Блинну-Фонгу. shin=0 — матовая поверхность (стены,
+      // ткань, кожа); shin→1 — металл: чем выше, тем ярче и уже пятно отражения
+      vec3 V = normalize(cam - vw);
+      vec3 H = normalize(L + V);
+      float spec = shin > 0.0 ? pow(max(dot(n, H), 0.0), mix(10.0, 120.0, shin)) * (0.25 + 0.5 * shin) : 0.0;
+      vec3 c = mix(base * (0.45 + 0.6 * d) + rim + spec, sky, fog * 0.7);
       gl_FragColor = vec4(c, alpha);
     }`;
 
@@ -385,6 +398,7 @@ function initGL(){
     loc.tex = gl.getUniformLocation(pr, 'tex');
     loc.useTex = gl.getUniformLocation(pr, 'useTex');
     loc.uvs = gl.getUniformLocation(pr, 'uvs');
+    loc.shin = gl.getUniformLocation(pr, 'shin'); // сила блика материала (0 = матовый)
 
     return true;
   } catch(e) {
@@ -562,6 +576,9 @@ function drawParts(parts, parent){
     M = mul(M, mS(p[4], p[5], p[6]));
     gl.uniformMatrix4fv(loc.model, false, new Float32Array(M));
     gl.uniform3fv(loc.col, p[7]);
+    // материал детали: явный блеск в части (индекс 10) или по таблице цветов;
+    // если ни то ни другое — матовый (0)
+    gl.uniform1f(loc.shin, p[10] !== undefined ? p[10] : (SHIN.get(p[7].join(',')) || 0));
     gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_SHORT, 0);
   }
 }
@@ -574,6 +591,16 @@ function drawBall(M, col){
 
 const GC={blk:[.09,.09,.1],gm:[.2,.21,.24],steel:[.55,.57,.6],wood:[.42,.26,.12],dwood:[.28,.17,.09],olive:[.24,.3,.2],
   tan:[.55,.46,.3],grn:[.2,.3,.18],silver:[.72,.74,.78],nick:[.62,.64,.68],glass:[.07,.1,.13]};
+// Таблица материалов «цвет → блеск» (0=матовый … 1=зеркальный). Ключ — цвет детали,
+// склеенный из каналов: металлические цвета оружия (сталь, никель, серебро, воронёная
+// сталь) дают блик, дерево и пластик почти нет. Цвета бойцов (ткань, кожа, тониовка
+// команд) в таблице нет — они остаются матовыми, как настоящая форма
+const SHIN = new Map([
+  [GC.gm.join(','), 0.55], [GC.steel.join(','), 0.85], [GC.nick.join(','), 0.8],
+  [GC.silver.join(','), 0.9], [GC.glass.join(','), 1.0], [GC.blk.join(','), 0.22],
+  [GC.wood.join(','), 0.12], [GC.dwood.join(','), 0.12], [GC.olive.join(','), 0.08],
+  [GC.tan.join(','), 0.08], [GC.grn.join(','), 0.08]
+]);
 const cy=(x,y,z,d,l,c)=>['c',x,y,z,d,d,l,c,0];
 const rb=(x,y,z,a,b,l,c,t)=>['b',x,y,z,a,b,l,c,t||0];
 const sp=(x,y,z,a,b,l,c)=>['s',x,y,z,a,b,l,c,0];
@@ -1695,6 +1722,19 @@ if(botDiffEl){
     }
   });
 }
+// Время раунда: селектор в стартовом меню, выбор сохраняется в localStorage.
+// Применяется при старте матча у хоста (в одиночной игре — сразу); гости получают
+// таймер уже из botState хоста, поэтому синхронизировать отдельно не нужно
+let roundMinutes = 300;
+try { const rt = parseInt(localStorage.getItem('round-time'), 10); if (rt >= 60 && rt <= 3600) roundMinutes = rt; } catch (e) {}
+const roundTimeEl = document.getElementById('round-time');
+if (roundTimeEl) {
+  roundTimeEl.value = String(roundMinutes);
+  roundTimeEl.addEventListener('change', () => {
+    const v = parseInt(roundTimeEl.value, 10);
+    if (v >= 60 && v <= 3600) { roundMinutes = v; try { localStorage.setItem('round-time', String(v)); } catch (e) {} }
+  });
+}
 updateBotPanel();
 
 let mouseDown = false;
@@ -1726,7 +1766,8 @@ const wmenuTitle = document.getElementById('wmenu-title');
 function beginRoundFromMenu(){
   wmenuEl.style.display = 'none';
   roundActive = true;
-  if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = 300; statFrags = 0; statDeaths = 0; }
+  // при первом старте матча таймер раунда берётся из селектора меню (по умолчанию 5 мин)
+  if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = roundMinutes; statFrags = 0; statDeaths = 0; }
   switchSlot(1);
   if(!isMobile){ try{ cv.requestPointerLock(); }catch(e){} }
 }
