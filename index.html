@@ -182,14 +182,14 @@
   <section id="net-panel">
     <div class="net-title">СЕТЕВАЯ ИГРА · TELEGRAM MINI APP</div>
     <div id="tg-user-hint" style="font-size:11px;opacity:.8;margin-bottom:7px">Можно играть через Telegram или обычный браузер</div>
-    <div class="net-row"><select id="net-mode" aria-label="Режим сервера"><option value="local">Свой компьютер (хост)</option><option value="cloud">Облачный сервер</option></select></div>
+    <div class="net-row"><select id="net-mode" aria-label="Режим сервера"><option value="cloud" selected>Облачный сервер</option><option value="local">Свой компьютер (хост)</option></select></div>
     <div class="net-row"><input id="net-server" value="ws://localhost:8080" aria-label="Адрес сервера" placeholder="wss://адрес сервера"></div>
     <div class="net-row"><input id="net-room" value="pool-day" maxlength="24" aria-label="Комната" placeholder="Комната"></div>
     <div class="net-row"><input id="net-name" value="Игрок" maxlength="16" aria-label="Имя игрока" placeholder="Имя">
       <select id="net-team" aria-label="Команда"><option value="red">Красные</option><option value="blue">Синие</option></select></div>
     <div class="net-row"><button type="button" id="net-connect">Подключиться</button><button type="button" id="net-disconnect">Отключиться</button></div>
     <div class="net-row"><button type="button" id="net-invite" style="display:none">Пригласить в комнату</button></div>
-    <div id="net-status">Выберите локальный или облачный сервер. Для локального режима хост запускает START_INTERNET.bat.</div>
+    <div id="net-status">Облачный сервер выбран по умолчанию — просто нажмите «Подключиться». Для игры через свой компьютер выберите режим «Свой компьютер (хост)» и запустите START_INTERNET.bat.</div>
   </section>
   <div class="net-row" style="justify-content:center"><select id="bot-difficulty" aria-label="Сложность ботов" style="max-width:280px">
     <option value="easy">🟢 Боты: лёгкие</option>
@@ -1295,6 +1295,7 @@ function playerHit(dmg, attackerX, attackerZ){
 const tgApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 let tgBotUsername = new URLSearchParams(location.search).get('bot') || (window.GAME_CONFIG && window.GAME_CONFIG.botUsername) || '';
 if (window.GAME_CONFIG && window.GAME_CONFIG.cloudWsUrl) { document.getElementById('net-server').value = window.GAME_CONFIG.cloudWsUrl; }
+else { const me = document.getElementById('net-mode'); if (me && me.value === 'cloud') me.dispatchEvent(new Event('change')); }
 if (tgApp) {
   try {
     tgApp.ready(); tgApp.expand();
