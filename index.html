@@ -69,6 +69,10 @@
   #tags{position:absolute;inset:0;pointer-events:none;overflow:hidden}
   .tag{position:absolute;transform:translate(-50%,-100%);color:#9fd8ff;font-size:12px;font-weight:700;text-shadow:0 1px 2px #000,0 0 4px #000;white-space:nowrap;text-align:center;display:none}
   .tag i{display:block;height:3px;margin:2px auto 0;background:#5f5;border-radius:2px;width:36px}
+  .tag-red{color:#ff9b9b}
+  .tag-blue{color:#9bd0ff}
+  .tag-red i{background:#ff5f5f}
+  .tag-blue i{background:#5fa8ff}
   .dpop{position:absolute;transform:translate(-50%,-50%);font-weight:800;font-size:18px;color:#ffd76e;text-shadow:0 1px 3px #000,0 0 5px #000;pointer-events:none;white-space:nowrap}
   .dpop.kill{color:#ff5a4a;font-size:24px}
   .dpop.hs{color:#ff9a3d;font-size:23px}
@@ -1357,6 +1361,7 @@ function netConnect(){
         }
         Object.assign(p,{name:m.name||p.name,team:m.team||p.team,x:m.x||0,y:m.y||0,z:m.z||0,yaw:m.yaw||0,rotY:m.yaw||0,yawS:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
       } else if(m.type === 'peerLeft'){
+        removeTag(netPlayers.get(m.id));
         netPlayers.delete(m.id);
       } else if(m.type === 'hostChanged'){
         netIsHost = m.id === netId;
@@ -1396,14 +1401,14 @@ function netConnect(){
       } else if(m.type === 'notice') netStatus(m.text||'Серверное сообщение');
     });
     netSocket.addEventListener('close', () => {
-      netConnected=false; netIsHost=false; netId=null; netPlayers.clear();
+      netConnected=false; netIsHost=false; netId=null; netPlayers.forEach(p => removeTag(p)); netPlayers.clear();
       netStatus('Соединение закрыто. Одиночная игра продолжает работать.'); const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='none';
         updateBotPanel();
     });
     netSocket.addEventListener('error', () => netStatus('Не удалось подключиться. Проверь адрес и запущен ли сервер.'));
   }catch(e){ netStatus('Ошибка WebSocket: '+e.message); }
 }
-function netDisconnect(){ if(netSocket){ netSocket.close(); netSocket=null; } netConnected=false; netIsHost=false; netPlayers.clear(); netStatus('Отключено · одиночная игра'); matchLive=false; roundOver=false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
+function netDisconnect(){ if(netSocket){ netSocket.close(); netSocket=null; } netConnected=false; netIsHost=false; netPlayers.forEach(p => removeTag(p)); netPlayers.clear(); netStatus('Отключено · одиночная игра'); matchLive=false; roundOver=false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
 document.getElementById('net-connect').addEventListener('click', netConnect);
 document.getElementById('net-disconnect').addEventListener('click', netDisconnect);
 document.getElementById('net-invite').addEventListener('click', () => {
@@ -2051,16 +2056,18 @@ function update(dt, t){
 const tagsEl = document.getElementById('tags');
 function updateTags(vp, eye){
   const W = cv.clientWidth, Hh = cv.clientHeight;
-  bots.forEach(b => {
-    if(b.team !== P.team) return;
-    if(!b.tagEl){
-      b.tagEl = document.createElement('div'); b.tagEl.className = 'tag';
-      b.tagEl.innerHTML = '<span></span><i></i>'; b.tagEl.firstChild.textContent = b.name;
-      tagsEl.appendChild(b.tagEl);
+  const tagFor = (ent, colTeam) => {
+    if(!ent.tagEl){
+      ent.tagEl = document.createElement('div'); ent.tagEl.className = 'tag tag-' + colTeam;
+      ent.tagEl.innerHTML = '<span></span><i></i>';
+      tagsEl.appendChild(ent.tagEl);
     }
+    ent.tagEl.classList.toggle('tag-' + colTeam, true);
+    ent.tagEl.classList.toggle(colTeam === 'red' ? 'tag-blue' : 'tag-red', false);
+    ent.tagEl.firstChild.textContent = ent.name || '';
     let show = false;
-    if(playing && roundActive && b.alive){
-      const x = b.x, y = b.y + 2.15*b.model.h + 0.3, z = b.z;
+    if(playing && roundActive && ent.alive){
+      const x = ent.x, y = ent.y + 2.15*ent.model.h + 0.3, z = ent.z;
       const cw = vp[3]*x + vp[7]*y + vp[11]*z + vp[15];
       if(cw > 0.1){
         const nx = (vp[0]*x + vp[4]*y + vp[8]*z + vp[12])/cw, ny = (vp[1]*x + vp[5]*y + vp[9]*z + vp[13])/cw;
@@ -2073,17 +2080,20 @@ function updateTags(vp, eye){
           }
           if(vis){
             show = true;
-            b.tagEl.style.left = ((nx*0.5 + 0.5)*W) + 'px';
-            b.tagEl.style.top = ((1 - (ny*0.5 + 0.5))*Hh) + 'px';
-            b.tagEl.lastChild.style.width = Math.max(0, b.hp/b.maxHp)*36 + 'px';
+            ent.tagEl.style.left = ((nx*0.5 + 0.5)*W) + 'px';
+            ent.tagEl.style.top = ((1 - (ny*0.5 + 0.5))*Hh) + 'px';
+            ent.tagEl.lastChild.style.width = Math.max(0, ent.hp/ent.maxHp)*36 + 'px';
           }
         }
       }
     }
-    b.tagEl.style.display = show ? 'block' : 'none';
-  });
+    ent.tagEl.style.display = show ? 'block' : 'none';
+  };
+  bots.forEach(b => { if(b.team === P.team) tagFor(b, b.team); });
+  netPlayers.forEach(p => tagFor(p, p.team || P.team));
   updatePops(vp, W, Hh);
 }
+function removeTag(ent){ if(ent && ent.tagEl){ ent.tagEl.remove(); ent.tagEl = null; } }
 
 // ---------- Скелетная анимация ботов (IK для ног и рук) ----------
 function limbMat(p1, p2, r){ // цилиндр от p1 до p2 радиуса r
