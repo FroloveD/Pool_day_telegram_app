@@ -1081,7 +1081,7 @@ function shoot(){
   recoilOffset = 0.08;
   beep('shot');
 
-  const oy = P.y + eyeOff;
+  const oy = P.y + eyeOff + Math.sin(walkTimer) * 0.03;
   const cpb = Math.cos(P.pitch), dbx = Math.sin(P.yaw)*cpb, dby = Math.sin(P.pitch), dbz = -Math.cos(P.yaw)*cpb;
   const distMul = 1 + Math.min(2.5, rayDist(P.x, oy, P.z, dbx, dby, dbz) / 18);
   const firstShot = spreadHeat <= 0 && !P.moving && !P.airborne;
