@@ -73,6 +73,8 @@
   .tag-blue{color:#9bd0ff}
   .tag-red i{background:#ff5f5f}
   .tag-blue i{background:#5fa8ff}
+  .tag-bot{opacity:.82}
+  .tag-bot span{font-weight:600}
   .dpop{position:absolute;transform:translate(-50%,-50%);font-weight:800;font-size:18px;color:#ffd76e;text-shadow:0 1px 3px #000,0 0 5px #000;pointer-events:none;white-space:nowrap}
   .dpop.kill{color:#ff5a4a;font-size:24px}
   .dpop.hs{color:#ff9a3d;font-size:23px}
@@ -2056,15 +2058,16 @@ function update(dt, t){
 const tagsEl = document.getElementById('tags');
 function updateTags(vp, eye){
   const W = cv.clientWidth, Hh = cv.clientHeight;
-  const tagFor = (ent, colTeam) => {
+  const tagFor = (ent, colTeam, isBot) => {
     if(!ent.tagEl){
-      ent.tagEl = document.createElement('div'); ent.tagEl.className = 'tag tag-' + colTeam;
+      ent.tagEl = document.createElement('div'); ent.tagEl.className = 'tag tag-' + colTeam + (isBot ? ' tag-bot' : '');
       ent.tagEl.innerHTML = '<span></span><i></i>';
       tagsEl.appendChild(ent.tagEl);
     }
     ent.tagEl.classList.toggle('tag-' + colTeam, true);
+    ent.tagEl.classList.toggle('tag-bot', !!isBot);
     ent.tagEl.classList.toggle(colTeam === 'red' ? 'tag-blue' : 'tag-red', false);
-    ent.tagEl.firstChild.textContent = ent.name || '';
+    ent.tagEl.firstChild.textContent = (isBot ? '🤖 ' : '') + (ent.name || '');
     let show = false;
     if(playing && roundActive && ent.alive){
       const x = ent.x, y = ent.y + 2.15*ent.model.h + 0.3, z = ent.z;
@@ -2089,8 +2092,8 @@ function updateTags(vp, eye){
     }
     ent.tagEl.style.display = show ? 'block' : 'none';
   };
-  bots.forEach(b => { if(b.team === P.team) tagFor(b, b.team); });
-  netPlayers.forEach(p => tagFor(p, p.team || P.team));
+  bots.forEach(b => { if(b.team === P.team) tagFor(b, b.team, true); });
+  netPlayers.forEach(p => tagFor(p, p.team || P.team, false));
   updatePops(vp, W, Hh);
 }
 function removeTag(ent){ if(ent && ent.tagEl){ ent.tagEl.remove(); ent.tagEl = null; } }
