@@ -92,6 +92,10 @@
   #bot-panel button{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;font-size:14px;font-weight:700;padding:4px 10px;cursor:pointer;touch-action:manipulation}
   #bot-panel button:hover{background:rgba(60,120,180,.6)}
   #dmg-indicator{position:absolute;left:50%;top:50%;width:180px;height:180px;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity 0.1s linear}
+  /* Оверлей смерти «ПОТРАЧЕНО»: затемнение + крупная надпись; появление мгновенное,
+     исчезновение — плавное за 1с (transition включается JS-ом только на фейд) */
+  #wasted{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:60;pointer-events:none;background:radial-gradient(ellipse at center, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.6));opacity:1}
+  #wasted span{font-size:min(13vw,110px);font-weight:900;letter-spacing:.14em;color:#a8232c;text-shadow:0 0 22px rgba(0,0,0,.95),0 4px 8px #000;-webkit-text-stroke:2px #1a0000}
   #dmg-arrow{width:100%;height:100%;background:radial-gradient(circle, transparent 55%, rgba(255, 30, 30, 0.75) 75%, transparent 76%);clip-path:polygon(30% 0%, 70% 0%, 50% 25%)}
 
   #mobile-controls{position:fixed;inset:0;pointer-events:none;z-index:5;display:none}
@@ -158,6 +162,7 @@
   <div id="wname" onclick="cycleWeaponSlot()"></div>
   <div id="ammo">🔫 30 / ∞</div>
   <div id="msg"></div>
+  <div id="wasted"><span>ПОТРАЧЕНО</span></div>
   <div id="armor-equip"></div>
   <div id="tags"></div>
   <div id="hitm">✕</div>
@@ -1097,6 +1102,7 @@ let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
 let roundTimeLeft = 300, roundOver = false, matchLive = false, roundWinner = null;
 let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0, burstCount = 0, eyeOff = 1.65;
 let crouchToggle = false, ctrlPending = false;
+let deathPauseT = 0; // пауза между смертью и респауном (1.25с), в это время показывается «ПОТРАЧЕНО»
 let statFrags = 0, statDeaths = 0;
 let buyingPhase = 1;
 
@@ -1114,6 +1120,21 @@ function showMsg(t){
   msgEl.classList.remove('anim');
   void msgEl.offsetWidth;
   msgEl.classList.add('anim');
+}
+
+// Оверлей «ПОТРАЧЕНО»: показывается мгновенно в момент смерти, гаснет за 1с после респауна
+const wastedEl = document.getElementById('wasted');
+function showWasted(){
+  if(!wastedEl) return;
+  wastedEl.style.transition = 'none'; // появление без анимации
+  wastedEl.style.opacity = '1';
+  wastedEl.style.display = 'flex';
+}
+function fadeWasted(){
+  if(!wastedEl) return;
+  wastedEl.style.transition = 'opacity 1s ease'; // плавное исчезновение за 1с
+  wastedEl.style.opacity = '0';
+  setTimeout(() => { if(wastedEl && wastedEl.style.opacity === '0') wastedEl.style.display = 'none'; }, 1050);
 }
 
 function getActiveWeapon(){ return inventory[activeSlot]; }
@@ -1426,7 +1447,7 @@ function autoFireCheck(){
 }
 
 function shoot(){
-  if(!playing || !roundActive || reloading > 0) return;
+  if(!playing || !roundActive || reloading > 0 || P.hp <= 0) return; // мёртвый не стреляет
   const w = getActiveWeapon();
   if(!w) return;
 
@@ -1436,7 +1457,7 @@ function shoot(){
     knifeSwing(); // у ножа вместо выстрела — свист клинка
     let hitBot = null;
     bots.forEach(b => {
-      if(!b.alive || b.team === P.team) return;
+      if(!b.alive || b.team === P.team || (b.spawnProt||0) > 0) return; // защищённого после респауна нож не достаёт
       const dist = Math.hypot(b.x - P.x, b.z - P.z);
       if(dist < w.range && Math.abs((b.y+0.9) - (P.y+1.5)) < 1.5){ hitBot = b; }
     });
@@ -1515,7 +1536,9 @@ function shoot(){
   else if(dy > 1e-4){ const t = (H - oy)/dy; if(t > 0 && t < bestT){ bestT = t; hitBot = null; hitC = null; hitPlane = 1; } }
 
   const ip = [P.x + dx*bestT, oy + dy*bestT, P.z + dz*bestT];
-  if(hitBot){
+  if(hitBot && (hitBot.spawnProt||0) > 0){
+    // неуязвимость 0.75с после респауна бота: пуля поглощается без урона и маркера
+  } else if(hitBot){
     const inHead = ip[1] >= hitBot.y + 1.44;
     const hs = inHead && Math.hypot(ip[0] - hitBot.x, ip[2] - hitBot.z) < 0.16;
     const dmg = inHead ? w.dmg * (hs ? 2 : 1.35) : w.dmg;
@@ -1548,7 +1571,7 @@ function killBot(b){
   if(b.weapon) groundWeapons.push({id:gwSeq++, x:b.x, z:b.z, rot:Math.random()*6.28, weapon:b.weapon});
   setTimeout(() => {
     const sp = getTeamSpawn(b.team === 'blue', b);
-    b.x = sp[0]; b.z = sp[1]; b.rotY = Math.atan2(-sp[0], -sp[1]); b.yawS = b.rotY; b.vx = b.vz = 0; b.spd = 0; b.aim = 0; b.hp = b.maxHp; b.alive = true; b.tgt = null; pickNav(b);
+    b.x = sp[0]; b.z = sp[1]; b.rotY = Math.atan2(-sp[0], -sp[1]); b.yawS = b.rotY; b.vx = b.vz = 0; b.spd = 0; b.aim = 0; b.hp = b.maxHp; b.alive = true; b.spawnProt = 0.75; b.tgt = null; pickNav(b);
   }, b.team === 'red' ? 3000 : 2000);
 }
 
@@ -1584,21 +1607,23 @@ function applyPlayerDamage(dmg){
 }
 
 function playerHit(dmg, attackerX, attackerZ){
+  // мёртвый (идёт пауза смерти) или защищённый после респауна урон не получает
+  if(P.hp <= 0 || (P.spawnProt || 0) > 0) return;
   P.hp -= applyPlayerDamage(dmg);
   beep('hurt');
   const dx = attackerX - P.x; const dz = attackerZ - P.z;
   dmgAngle = (Math.atan2(dx, -dz) - P.yaw) * (180 / Math.PI);
   dmgTimer = 1.0;
 
+  // Смерть: мгновенного респауна нет — держим P.hp=0 и включаем паузу 1.25с с
+  // надписью «ПОТРАЧЕНО»; сам респаун выполняется в update() когда таймер истечёт
   if(P.hp <= 0){
     if(P.team==='red') scoreBots++; else scoreMe++;
     if(netConnected) netSend({type:'frag',team:P.team==='red'?'blue':'red'});
-    const sp = getTeamSpawn(P.team==='blue', P);
-    P.hp = 100; P.x = sp[0]; P.y = 0.1; P.z = sp[1]; P.vy = 0; P.armor = 0; P.armorHp = 0; P.armorMax = 0;
+    P.hp = 0;
+    deathPauseT = 1.25;
+    showWasted();
     statDeaths++;
-    showMsg('Вы погибли! Новый раунд');
-    roundActive = false;
-    openBuyMenu();
   }
 }
 
@@ -1663,7 +1688,7 @@ function netConnect(){
       let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
       if(m.type === 'welcome'){
         netId = m.id; netIsHost = !!m.host; netConnected = true;
-        P.team = netTeam; const nsp=getTeamSpawn(P.team === 'blue',P); P.x=nsp[0]; P.z=nsp[1];
+        P.team = netTeam; const nsp=getTeamSpawn(P.team === 'blue',P); P.x=nsp[0]; P.z=nsp[1]; P.spawnProt = 0.75;
         netStatus(`В комнате ${room} · ${netIsHost ? 'вы хост матча' : 'подключено'} · команда ${netTeam === 'red' ? 'красных' : 'синих'}` + (m.verified ? ' · ✅ Telegram' : ''));
         const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='block';
         updateBotPanel();
@@ -1706,12 +1731,12 @@ function netConnect(){
         if(m.roundOver && !roundOver){ roundOver = true; roundActive = false; matchLive = false; roundWinner = m.winner || 'draw'; showRoundOver(roundWinner); }
         else if(!m.roundOver && roundOver){ roundOver = false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
       } else if(m.type === 'damage' && m.target === netId){
+        // уже мёртв (идёт пауза) или под защитой респауна — урон не принимаем
+        if(P.hp <= 0 || (P.spawnProt || 0) > 0) return;
         P.hp = Math.max(0, P.hp - applyPlayerDamage(m.amount||0)); beep('hurt'); dmgTimer=0.8;
         if(P.hp <= 0){
           netSend({type:'frag',team:m.attackerTeam});
-          const sp=getTeamSpawn(P.team==='blue',P); P.x=sp[0];P.z=sp[1];P.y=0.1;P.vy=0;P.hp=100;P.armor=0;P.armorHp=0;P.armorMax=0;crouchToggle=false;
-          statDeaths++;
-          showMsg('Вы выбыли · респаун');
+          P.hp = 0; deathPauseT = 1.25; showWasted(); statDeaths++;
         }
       } else if(m.type === 'armorTaken' && netIsHost){
         armorPickup.active = false; armorPickup.respawnAt = performance.now() + ARMOR_RESPAWN_MS;
@@ -1720,7 +1745,7 @@ function netConnect(){
         if(gi !== -1) groundWeapons.splice(gi, 1);
       } else if(m.type === 'botHit' && netIsHost){
         const b=bots[m.index];
-        if(b && b.alive){
+        if(b && b.alive && (b.spawnProt||0) <= 0){
           b.hp -= m.amount||0;
           if(b.hp <= 0){ killBot(b); if(m.attackerTeam==='red') scoreMe++; else scoreBots++; netSend({type:'frag',team:m.attackerTeam,by:m.attacker}); }
         }
@@ -1762,7 +1787,7 @@ function netPublish(now){
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
+    netSend({type:'botState',bots:bots.map(b=>({x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0,spawnProt:+(b.spawnProt||0).toFixed(2)})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
   }
 }
 
@@ -1774,7 +1799,7 @@ function spawnBot(i, team){
   const w = BOT_WEAPONS[Math.floor(Math.random()*BOT_WEAPONS.length)];
   bots.push({
     x: s[0], y: 0, z: s[1], tx: s[0], tz: s[1], rotY: team === 'blue' ? -Math.PI/2 : Math.PI/2,
-    maxHp: team === 'red' ? 130 : 100, hp: team === 'red' ? 130 : 100, alive: true, shootT: 1 + Math.random()*1.5, weapon: w, team: team, stuckT: 0, vx: 0, vz: 0, spd: 0, walkT: Math.random()*6, aim: 0, pitchS: 0, kick: 0, seed: Math.random()*6, diedAt: 0, yawS: team === 'blue' ? -Math.PI/2 : Math.PI/2, name: team === P.team ? ALLY_NAMES[i % ALLY_NAMES.length] : null,
+    maxHp: team === 'red' ? 130 : 100, hp: team === 'red' ? 130 : 100, alive: true, spawnProt: 0.75, shootT: 1 + Math.random()*1.5, weapon: w, team: team, stuckT: 0, vx: 0, vz: 0, spd: 0, walkT: Math.random()*6, aim: 0, pitchS: 0, kick: 0, seed: Math.random()*6, diedAt: 0, yawS: team === 'blue' ? -Math.PI/2 : Math.PI/2, name: team === P.team ? ALLY_NAMES[i % ALLY_NAMES.length] : null,
     model: BOT_MODELS[i % BOT_MODELS.length],
     hold: (w.type === 'sniper' ? 13 : w.type === 'shotgun' ? 4 : 6) + Math.random()*5
   });
@@ -1932,6 +1957,9 @@ function beginRoundFromMenu(){
   roundActive = true;
   // при первом старте матча таймер раунда берётся из селектора меню (по умолчанию 5 мин)
   if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = roundMinutes; statFrags = 0; statDeaths = 0; }
+  // неуязвимость 0.75с активируется в момент фактического старта раунда: пока открыто меню покупки,
+  // таймер защиты не тратится (иначе защита истекла бы, пока игрок выбирает оружие)
+  P.spawnProt = 0.75;
   switchSlot(1);
   if(!isMobile){ try{ cv.requestPointerLock(); }catch(e){} }
 }
@@ -2193,7 +2221,7 @@ function update(dt, t){
     }
 
     P.moving = (mx !== 0 || mz !== 0);
-    if(P.moving){
+    if(P.moving && P.hp > 0){ // мёртвый не двигается (идёт пауза смерти)
       const l = Math.hypot(mx, mz) || 1;
       const sprint = (keys['ShiftLeft'] || (isMobile && mag > 0.92)) ? 1.4 : 1.0;
       P.x += (mx/l) * currentSpeed * mag * sprint * dt;
@@ -2205,7 +2233,7 @@ function update(dt, t){
 
     // ПРЫЖОК: импульс задаётся ДО гравитации и проверки пола,
     // иначе проверка пола в этом же кадре обнуляла скорость и прыжок не срабатывал
-    if(keys['Space']){
+    if(keys['Space'] && P.hp > 0){ // мёртвый не прыгает
       if(inPool){
         P.vy = 9.0; // выталкивает на бортик
       } else if(P.y <= g + 0.05 && P.vy <= 0){
@@ -2333,6 +2361,7 @@ function update(dt, t){
         b.pitchS += (Math.max(-0.6, Math.min(0.6, want)) - b.pitchS)*Math.min(1, dt*8);
       } else b.pitchS *= 1 - Math.min(1, dt*5);
       b.kick = Math.max(0, b.kick - dt*7);
+      if(b.spawnProt > 0) b.spawnProt -= dt; // тик неуязвимости после респауна бота
 
       // --- стрельба: точность падает с расстоянием, урон зависит от оружия ---
       b.shootT -= dt;
@@ -2346,7 +2375,7 @@ function update(dt, t){
           if(Math.random() < Math.max(0.25, D.hitBase - pd*D.hitFall)){
             if(T.ref === 'P') playerHit(bd*0.8, b.x, b.z);
             else if(T.ref.netId) netSend({type:'damage',target:T.ref.netId,amount:bd*0.8,attackerTeam:b.team});
-            else {
+            else if((T.ref.spawnProt||0) <= 0) { // бот-цель под защитой респауна — выстрел мимо
               T.ref.hp -= bd;
               if(T.ref.hp <= 0 && T.ref.alive){ killBot(T.ref); if(b.team === 'blue') scoreBots++; else scoreMe++; if(netConnected) netSend({type:'frag',team:b.team}); }
             }
@@ -2359,6 +2388,21 @@ function update(dt, t){
     if(reloading > 0){
       reloading -= dt;
       if(reloading <= 0){ const w = getActiveWeapon(); if(w) ammo = w.mag; }
+    }
+    // тик неуязвимости после респауна (0.75с)
+    if(P.spawnProt > 0) P.spawnProt -= dt;
+    // пауза после смерти: 1.25с показывается «ПОТРАЧЕНО», затем респаун на базе,
+    // включение защиты 0.75с, гашение надписи (1с) и меню покупки
+    if(deathPauseT > 0){
+      deathPauseT -= dt;
+      if(deathPauseT <= 0){
+        const sp = getTeamSpawn(P.team==='blue', P);
+        P.x=sp[0]; P.z=sp[1]; P.y=0.1; P.vy=0; P.hp=100; P.armor=0; P.armorHp=0; P.armorMax=0; crouchToggle=false;
+        P.spawnProt = 0.75;
+        fadeWasted();
+        roundActive = false;
+        openBuyMenu();
+      }
     }
     if(fireCd > 0) fireCd -= dt;
     if(netShotT > 0) netShotT -= dt; // таймер флага выстрела для сетевой публикации
