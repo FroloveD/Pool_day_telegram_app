@@ -583,16 +583,19 @@ function pistol(o){ const L=o.len||.2, T=o.th||.045; return [
   rb(0,.035,L*.5-.02,T,.05,L,o.sl), cy(0,.036,L-.01,T*.55,.07,o.bar||GC.blk),
   rb(0,-.004,L*.45-.03,T*.9,.035,L*.9,o.fr), rb(0,-.07,.02,T*.9,o.gr||.12,.065,o.fr,.22),
   rb(0,-.035,.075,.012,.03,.07,GC.blk),
+  // детали: целик + мушка, окно выброса, спусковая скоба с крючком, курок
   rb(0,.065,.03,.02,.012,.018,GC.blk), rb(0,.065,L-.05,.01,.012,.014,GC.blk),
   rb(T*.55,.045,L*.4,.004,.016,.05,GC.gm), rb(0,-.052,.085,.008,.004,.05,GC.blk),
   rb(0,-.028,.078,.006,.022,.007,GC.blk), rb(0,.018,-.012,.012,.026,.014,GC.blk,-.45)]; }
 function shotgun(o){ return [cy(0,.035,.38,.03,.76,GC.gm), cy(0,0,.34,.035,o.auto?.5:.45,GC.steel),
   rb(0,0,o.auto?.2:.3,.062,.055,.2,o.fore), rb(0,.02,0,.056,.085,.26,GC.blk),
   rb(0,0,-.32,.05,.1,.4,o.stock,-.08), rb(0,-.06,-.05,.04,.1,.06,o.stock,.3),
+  // вентилируемая планка над стволом и мушка-«зерно» на дульном срезе
   rb(0,.055,.35,.012,.008,.6,GC.gm), sp(0,.062,.7,.01,.01,.01,GC.blk),
   rb(0,-.055,.02,.009,.004,.06,GC.blk)]; }
 function smg(o){ const L=o.l, w=o.w||.055; const r=[rb(0,.01,0,w,.09,L,o.body), cy(0,.03,L/2+o.bl/2,.02,o.bl,GC.gm),
   rb(0,-.07,-.02,.04,.1,.06,o.body,.25), rb(0,-.1,.08,.03,o.mag,.06,GC.blk,o.mt||0), rb(0,0,-L/2-.08,.03,.06,.2,GC.gm),
+  // мушка на стволе, целик сзади, рукоять затвора, спусковая скоба
   rb(0,.06,L/2+o.bl*.5,.018,.025,.018,GC.blk), rb(0,.062,-L*.15,.028,.014,.02,GC.blk),
   rb(w*.6,.045,-.02,.018,.012,.045,GC.blk), rb(0,-.048,.05,.008,.004,.05,GC.blk)];
   if(o.sup) r.push(cy(0,.03,L/2+.12,.042,.22,GC.blk));
@@ -600,11 +603,13 @@ function smg(o){ const L=o.l, w=o.w||.055; const r=[rb(0,.01,0,w,.09,L,o.body), 
   return r; }
 function p90(){ return [sp(0,.02,0,.085,.1,.5,GC.gm), rb(0,.075,0,.04,.03,.4,[.45,.5,.55]), rb(0,-.07,.12,.04,.1,.06,GC.blk,.15),
   cy(0,.025,.34,.02,.14,GC.blk), rb(0,.02,-.26,.05,.08,.08,GC.blk),
+  // встроенный коллиматор сверху (магазин P90 лежит под ним) и спусковая скоба
   rb(0,.105,-.08,.03,.02,.09,GC.blk), rb(0,-.05,.03,.008,.004,.05,GC.blk)]; }
 function ak(o){ const W=o.wood||GC.wood, M=o.mag||GC.blk; const r=[
   rb(0,.01,0,.05,.075,.3,GC.blk), cy(0,.03,.46,.022,.5,GC.gm), cy(0,.058,.36,.02,.3,GC.gm),
   rb(0,0,.3,.056,.062,.22,W), rb(0,.02,-.27,.045,.1,.3,W,-.1), rb(0,-.07,-.03,.04,.1,.06,W,.35),
   rb(0,-.1,.09,.034,.17,.07,M,-.25), rb(0,-.19,.15,.034,.1,.07,M,-.5), sp(0,.062,.62,.012,.04,.012,GC.gm),
+  // «уши» мушки, целик, рукоять затвора, спусковая скоба, шомпол и косой компенсатор
   cy(-.014,.062,.62,.006,.03,GC.blk), cy(.014,.062,.62,.006,.03,GC.blk), rb(0,.055,.1,.026,.02,.03,GC.blk),
   rb(.03,.045,.12,.014,.012,.05,GC.gm), rb(0,-.052,.02,.008,.004,.055,GC.blk),
   cy(0,.004,.55,.006,.42,GC.gm), rb(0,.034,.72,.018,.024,.06,GC.gm,-.18)];
@@ -612,6 +617,7 @@ function ak(o){ const W=o.wood||GC.wood, M=o.mag||GC.blk; const r=[
   return r; }
 function m4(o){ const B=o.col||GC.blk; const r=[rb(0,.015,0,.05,.075,.32,B), cy(0,.025,.46,.022,.6,GC.gm), cy(0,0,.33,.045,.26,B),
   rb(0,.057,0,.03,.04,.2,B), rb(0,0,-.28,.04,.09,.25,B,-.04), rb(0,-.07,-.04,.04,.1,.06,B,.3), rb(0,-.09,.08,.035,.16,.07,GC.blk,-.08),
+  // стойка мушки с пеналом, окно выброса, ручка перезаряжания, спусковая скоба
   rb(0,.05,.62,.02,.055,.03,B), rb(0,.082,.62,.007,.014,.01,GC.blk), rb(.026,.04,.06,.004,.018,.06,GC.gm),
   rb(0,.062,-.16,.036,.01,.05,B), rb(0,-.05,.03,.008,.004,.05,GC.blk)];
   if(o.sup) r.push(cy(0,.025,.78,.04,.22,GC.blk));
@@ -619,6 +625,7 @@ function m4(o){ const B=o.col||GC.blk; const r=[rb(0,.015,0,.05,.075,.32,B), cy(
   return r; }
 function bullpup(o){ const r=[rb(0,.01,-.05,.06,.09,.52,o.body), cy(0,.03,.4,.02,.34,GC.gm), rb(0,.07,-.02,.03,.04,.34,o.body),
   rb(0,-.07,.08,.04,.1,.06,o.body,.2), rb(0,-.09,-.14,.035,.17,.07,GC.blk,.1), rb(0,.02,-.32,.05,.1,.06,GC.blk),
+  // мушка впереди (магазин позади рукоятки — схема bullpup) и спусковая скоба
   rb(0,.055,.52,.016,.03,.02,GC.blk), rb(0,-.05,.12,.008,.004,.05,GC.blk)];
   if(o.scope) r.push(cy(0,.105,0,.04,.22,GC.blk));
   return r; }
@@ -626,6 +633,7 @@ function sniper(o){ const k=o.big?1:0, r=[rb(0,.01,0,.05,.08,.35,o.body), cy(0,.
   rb(0,0,-.3,.05,.1,.4,o.stock,-.06), rb(0,-.07,-.06,.04,.1,.06,o.stock,.3),
   cy(0,.09,.04,k?.05:.038,k?.34:.26,GC.blk), sp(0,.09,.04+(k?.17:.13),k?.065:.05,k?.065:.05,.03,GC.blk),
   sp(0,.09,.04-(k?.17:.13),.05,.05,.03,GC.blk), rb(0,-.08,.1,.035,.1,.07,GC.blk,-.05),
+  // тёмное стекло объектива оптики (чуть перед передним кольцом) и рукоять затвора
   cy(0,.09,.04+(k?.178:.138),k?.046:.042,.012,GC.glass), rb(.032,.03,-.02,.013,.013,.05,GC.steel,.5)];
   if(o.brake) r.push(cy(0,.03,.175+o.len+.03,.04,.1,GC.blk));
   if(o.semi) r.push(rb(0,-.1,.1,.035,.16,.07,GC.blk,-.1));
@@ -633,6 +641,7 @@ function sniper(o){ const k=o.big?1:0, r=[rb(0,.01,0,.05,.08,.35,o.body), cy(0,.
 function mg(){ return [rb(0,.02,0,.07,.1,.45,GC.blk), cy(0,.045,.56,.03,.6,GC.gm), cy(0,.045,.9,.05,.1,GC.blk),
   rb(0,-.09,0,.1,.12,.2,GC.olive), rb(0,0,.32,.056,.06,.2,GC.blk), rb(0,0,-.33,.05,.1,.3,GC.blk,-.05),
   rb(0,-.07,-.08,.04,.1,.06,GC.blk,.3), cy(-.04,-.03,.75,.008,.2,GC.gm), cy(.04,-.03,.75,.008,.2,GC.gm), rb(0,.075,.1,.03,.04,.2,GC.blk),
+  // короб с патронами слева, приёмник ленты, ручка для переноски
   rb(-.075,-.08,.08,.07,.09,.13,GC.olive), rb(.045,-.01,.22,.035,.05,.06,GC.blk), rb(0,.088,.02,.014,.012,.16,GC.blk)]; }
 
 const GUN_PARTS={
@@ -660,7 +669,7 @@ const GUN_PARTS={
  'SG 550':sniper({body:GC.blk,stock:GC.blk,len:.4,semi:1}),
  'G3/SG-1':sniper({body:GC.gm,stock:GC.blk,len:.5,semi:1,big:1}),
  'M249':mg(),
- 'Нож':[rb(0,0,.17,.012,.045,.24,GC.silver), rb(0,0,-.02,.022,.03,.12,GC.blk), rb(0,0,.05,.05,.014,.014,GC.blk)]
+ 'Нож':[rb(0,0,.17,.012,.045,.24,GC.silver), rb(0,0,-.02,.022,.03,.12,GC.blk), rb(0,0,.05,.05,.014,.014,GC.blk)] // третья часть — гарда
 };
 
 // ---------- Руки от первого лица (в координатах оружия) ----------
@@ -995,6 +1004,10 @@ function beep(type){
 }
 
 // ---------- Процедурные звуки выстрелов (шум + низкий удар + крак) ----------
+// Выстрел синтезируется из трёх слоёв без аудиофайлов:
+//   1) шумовой удар — фильтрованный белый шум (сама вспышка пороховых газов);
+//   2) низкий «бум» — синус с падающей частотой (отдача, тело звука);
+//   3) звонкий крак — короткий высокочастотный шум (сверхзвуковой хлопок пули).
 let noiseBuf = null;
 function getNoiseBuf(){
   if(!noiseBuf){
@@ -1004,6 +1017,8 @@ function getNoiseBuf(){
   }
   return noiseBuf;
 }
+// Шумовой слой: buffering=0.5с хватает с запасом; фильтр f0→f1 задаёт «спад»
+// хвоста (у снайперок хвост низкий и длинный, у ПП — короткий и высокий)
 function playNoise(t, dur, vol, ftype, f0, f1, q){
   if(vol <= 0.001) return;
   const src = AC.createBufferSource(); src.buffer = getNoiseBuf(); src.loop = true;
@@ -1016,6 +1031,8 @@ function playNoise(t, dur, vol, ftype, f0, f1, q){
   src.connect(f); f.connect(g); g.connect(AC.destination);
   src.start(t); src.stop(t+dur+0.05);
 }
+// Низкочастотный слой: синус f0→f1 (например 80→28 Гц у AWP) даёт «давящий»
+// бас; без него выстрел звучит как хлопок петарды
 function playThump(t, f0, f1, dur, vol){
   if(vol <= 0.001) return;
   const o = AC.createOscillator(), g = AC.createGain();
@@ -1027,10 +1044,13 @@ function playThump(t, f0, f1, dur, vol){
   o.connect(g); g.connect(AC.destination);
   o.start(t); o.stop(t+dur+0.05);
 }
+// Механический щелчок (сухой спуск, детали перезарядки); when — задержка в сек
 function clickSound(vol, when){
   if(!AC) return;
   playNoise(AC.currentTime + (when||0), 0.03, vol, 'bandpass', 3200, 0, 5);
 }
+// Таблица тембров: n=[частота,спад,длина,громкость] шума; t=[f0,f1,длина,громкость]
+// баса; c — крак. Сначала ищем отдельный тембр по имени (Deagle/AWP), затем по классу
 const GUN_SND = {
   handgun:{n:[2600,900,0.09,0.5], t:[190,55,0.09,0.45], c:[5200,0.02,0.28]},
   smg:{n:[3000,1100,0.06,0.45], t:[160,70,0.06,0.36], c:[5600,0.015,0.22]},
@@ -1041,13 +1061,15 @@ const GUN_SND = {
   'Desert Eagle':{n:[2200,700,0.14,0.62], t:[150,40,0.14,0.65], c:[5000,0.025,0.32]},
   'AWP':{n:[950,220,0.34,0.75], t:[72,26,0.32,0.8], c:[3300,0.03,0.35]}
 };
+// dist — расстояние до стреляющего (0 = свой выстрел): громкость падает по
+// квадрату расстояния, а для чужих выстрелов добавляется эхо-хвост от стен
 function gunSound(w, dist){
   if(!AC || !w) return;
   const t = AC.currentTime;
   const s = GUN_SND[w.name] || GUN_SND[w.type] || GUN_SND.rifle;
   const sup = w.name === 'M4A1' || w.name === 'TMP';
   const att = dist ? Math.max(0.05, 1/(1 + (dist*dist)/350)) : 1;
-  if(sup){
+  if(sup){ // глушитель: почти без баса, узкополосное тихое «пхх»
     playNoise(t, 0.06, 0.15*att, 'bandpass', 1400, 500, 1.2);
     playThump(t, 130, 60, 0.05, 0.11*att);
     return;
@@ -1057,10 +1079,13 @@ function gunSound(w, dist){
   if(s.c) playNoise(t, s.c[1], s.c[2]*att, 'highpass', s.c[0], 0, 0.7);
   if(dist) playNoise(t+0.03, 0.35, 0.09*att, 'lowpass', 500, 120, 0.5);
 }
+// Свист ножа: шум с растущей частотой фильтра — «вжих»
 function knifeSwing(){
   if(!AC) return;
   playNoise(AC.currentTime, 0.12, 0.11, 'bandpass', 900, 2600, 1.5);
 }
+// Три щелчка перезарядки, привязанные к длительности reload конкретного ствола:
+// отсоединил магазин (10%) → вставил (45%) → передёрнул затвор (80%)
 function reloadSound(w){
   if(!AC) return;
   const R = w.reload;
@@ -1074,7 +1099,7 @@ function reload(){
   const w = getActiveWeapon();
   if(!w || w.type === 'knife' || reloading > 0 || ammo === w.mag) return;
   reloading = w.reload;
-  reloadSound(w);
+  reloadSound(w); // щелчки перезарядки по таймингу этого ствола
 }
 
 function rayAABB(ox, oy, oz, dx, dy, dz, b){
@@ -1217,7 +1242,7 @@ function shoot(){
   if(w.type === 'knife'){
     if(fireCd > 0) return;
     fireCd = w.delay;
-    knifeSwing();
+    knifeSwing(); // у ножа вместо выстрела — свист клинка
     let hitBot = null;
     bots.forEach(b => {
       if(!b.alive || b.team === P.team) return;
@@ -1249,6 +1274,7 @@ function shoot(){
     return;
   }
 
+  // пустой магазин: сухой щелчок + автоперезарядка (щелчок один раз, пока идёт перезарядка)
   if(ammo <= 0){ if(reloading <= 0){ clickSound(0.15, 0); reload(); } return; }
   if(fireCd > 0) return;
 
@@ -1262,6 +1288,8 @@ function shoot(){
   burstCount = spreadHeat > 0.02 ? burstCount + 1 : 1;
   P.pitch = Math.min(1.5, P.pitch + 0.014);
   recoilOffset = 0.08;
+  // свой выстрел без затухания; netShotT — окно 0.12с (> интервала публикации 0.05с),
+  // чтобы флаг fl в сетевом пакете гарантированно передал факт выстрела другим
   gunSound(w, 0); netShotT = 0.12;
 
   const oy = P.y + eyeOff + ((zoomed && w.zoom) ? 0 : Math.sin(walkTimer) * 0.03);
@@ -1421,7 +1449,7 @@ if (netModeEl) netModeEl.addEventListener('change', () => {
 
 // ---------- СЕТЕВОЙ СЛОЙ (WebSocket relay, комнаты, команды, синхронизация) ----------
 let netSocket = null, netConnected = false, netIsHost = false, netId = null;
-let netShotT = 0;
+let netShotT = 0; // окно «только что выстрелил» для передачи факта выстрела по сети
 let netTeam = 'red', netName = 'Игрок', netLastSend = 0, netLastBots = 0;
 const netPlayers = new Map();
 const netStatusEl = document.getElementById('net-status');
@@ -1457,8 +1485,9 @@ function netConnect(){
           netPlayers.set(m.id,p);
         }
         Object.assign(p,{name:m.name||p.name,team:m.team||p.team,yaw:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
+        // чужой игрок выстрелил: флаг fl пришёл 1, а в прошлый раз был 0 → звук с затуханием
         if(m.fl && !p._sfl) gunSound(p.weapon, Math.hypot((p.x||0)-P.x,(p.z||0)-P.z));
-        p._sfl = !!m.fl;
+        p._sfl = !!m.fl; // запоминаем прошлое состояние, чтобы звук не повторялся каждый пакет
         p.nx=m.x||0; p.ny=m.y||0; p.nz=m.z||0; p.nyaw=m.yaw||0;
         if(p.x === undefined || p.x === null){ p.x=p.nx; p.y=p.ny; p.z=p.nz; p.rotY=p.nyaw; p.yawS=p.nyaw; }
       } else if(m.type === 'peerLeft'){
@@ -1472,6 +1501,7 @@ function netConnect(){
         (m.bots||[]).forEach((v,i)=>{
           let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; }
           b.nx=v.x; b.ny=v.y; b.nz=v.z; b.nrotY=v.rotY; b.nyawS=v.yawS===undefined?v.rotY:v.yawS;
+          // у гостя вспышка бота приходит из botState: переход «не стрелял → стреляет» = звук
           if((v.flash||0) > 0.02 && !(b.flash > 0.02)) gunSound(b.weapon, Math.hypot(b.x-P.x, b.z-P.z));
           const px=b.x, py=b.y, pz=b.z, pr=b.rotY, pys=b.yawS;
           Object.assign(b,v); b.x=px; b.y=py; b.z=pz; b.rotY=pr; b.yawS=pys;
@@ -1537,7 +1567,7 @@ function netPublish(now){
   if(now-netLastSend>50){
     netLastSend=now;
     const w=getActiveWeapon();
-    netSend({type:'player',x:+P.x.toFixed(3),y:+P.y.toFixed(3),z:+P.z.toFixed(3),yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths,fl:netShotT>0?1:0});
+    netSend({type:'player',x:+P.x.toFixed(3),y:+P.y.toFixed(3),z:+P.z.toFixed(3),yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths,fl:netShotT>0?1:0}); // fl — факт выстрела для звука у других
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
@@ -2104,6 +2134,7 @@ function update(dt, t){
       if(b.shootT <= 0){
         if(sees && pd < 38){
           b.shootT = D.cadence[0] + Math.random()*D.cadence[1]; b.flash = 0.07; b.kick = 1;
+          // на хосте бот стреляет сам — звук сразу, с затуханием по дистанции до игрока
           gunSound(b.weapon, Math.hypot(b.x-P.x, b.z-P.z));
           const bd = Math.max(6, Math.min(18, (b.weapon.dmg || 30)*0.28*D.dmgMul));
           if(Math.random() < Math.max(0.25, D.hitBase - pd*D.hitFall)){
@@ -2124,7 +2155,7 @@ function update(dt, t){
       if(reloading <= 0){ const w = getActiveWeapon(); if(w) ammo = w.mag; }
     }
     if(fireCd > 0) fireCd -= dt;
-    if(netShotT > 0) netShotT -= dt;
+    if(netShotT > 0) netShotT -= dt; // таймер флага выстрела для сетевой публикации
     spreadHeat = Math.max(0, spreadHeat - dt * 1.4);
     if(spreadHeat <= 0) burstCount = 0;
     const activeW = getActiveWeapon();
