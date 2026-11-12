@@ -1850,7 +1850,7 @@ function update(dt, t){
     // иначе проверка пола в этом же кадре обнуляла скорость и прыжок не срабатывал
     if(keys['Space']){
       if(inPool){
-        P.vy = 11.5; // выталкивает на бортик
+        P.vy = 9.0; // выталкивает на бортик
       } else if(P.y <= g + 0.05 && P.vy <= 0){
         P.vy = 8.5;  // стандартный прыжок с земли
         beep('jump');
@@ -2141,7 +2141,12 @@ function drawBot(b, now){
   const m = b.model, k = m.w, hh = m.h, dead = !b.alive;
   const yaw = b.yawS === undefined ? b.rotY : b.yawS, cs = Math.cos(yaw), sn = Math.sin(yaw);
   let root = mul(mT(b.x, b.y, b.z), mRy(yaw));
-  if(dead){ const t = Math.min(1, (now - b.diedAt)/600), e = t*t*(3 - 2*t); root = mul(mul(root, mT(0, 0.13*e, 0)), mRx(-1.5*e)); }
+  if(dead){
+    const t = Math.min(1, (now - b.diedAt)/900);
+    const e = 1 - Math.pow(1 - t, 2.2);
+    const side = ((b.seed || 0) - 3) * 0.12;
+    root = mul(mul(mul(mul(root, mT(0, 0.1*e, 0)), mRx(-1.62*e + 0.05*e*e)), mRz(side*e)), mRy(0.22*side*e));
+  }
   const sp = b.spd || 0, amp = dead ? 0 : Math.min(1, sp/4.2), ph = b.walkT || 0, bob = 0.025*amp*Math.cos(2*ph);
   const breath = dead ? 0 : (1 - Math.min(1, amp*3)) * Math.sin(now*0.0016 + (b.seed || 0)*7) * 0.008;
   let dirx = 0, dirz = 1;
