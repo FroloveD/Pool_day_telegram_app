@@ -90,8 +90,11 @@
 
   #mobile-controls{position:fixed;inset:0;pointer-events:none;z-index:5;display:none}
   .mob-visible #mobile-controls{display:block}
-  #joystick-zone{position:absolute;left:30px;bottom:30px;width:130px;height:130px;background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);border-radius:50%;pointer-events:auto;touch-action:none}
-  #joystick-knob{position:absolute;left:50%;top:50%;margin:-20px 0 0 -20px;width:40px;height:40px;background:rgba(255,255,255,0.6);border-radius:50%;pointer-events:none}
+  #joystick-zone{position:absolute;left:0;bottom:0;width:42%;height:100%;pointer-events:auto;touch-action:none}
+  #joy-base{position:absolute;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;background:rgba(255,255,255,0.08);border:2px solid rgba(255,255,255,0.3);display:none;pointer-events:none}
+  #joystick-knob{position:absolute;left:50%;top:50%;margin:-22px 0 0 -22px;width:44px;height:44px;background:rgba(255,255,255,0.6);border-radius:50%;pointer-events:none}
+  #btn-fire2{left:190px;bottom:170px;width:64px;height:64px;background:rgba(220,50,50,0.45)}
+  #btn-ads{right:120px;bottom:170px;width:56px;height:56px;background:rgba(60,160,90,0.5)}
   #touch-look{position:absolute;right:0;top:0;width:55%;height:100%;pointer-events:auto;touch-action:none}
   .mob-btn{position:absolute;pointer-events:auto;background:rgba(0,0,0,0.5);border:2px solid rgba(255,255,255,0.4);color:#fff;font-weight:700;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;user-select:none;touch-action:manipulation}
   #btn-shoot{right:30px;bottom:170px;width:75px;height:75px;background:rgba(220,50,50,0.6)}
@@ -109,9 +112,11 @@
   @media (orientation:landscape) and (max-height:560px){
     #stats{top:6px;font-size:15px;padding:2px 12px}
     #msg{top:28%;font-size:20px}
-    #joystick-zone{left:calc(22px + env(safe-area-inset-left));bottom:18px;width:112px;height:112px}
+    #joystick-zone{left:0;bottom:0;width:45%;height:100%}
     #touch-look{width:62%}
-    #btn-shoot{right:calc(26px + env(safe-area-inset-right));bottom:96px;width:70px;height:70px}
+    #btn-shoot{right:calc(26px + env(safe-area-inset-right));bottom:96px;width:78px;height:78px}
+    #btn-fire2{left:calc(150px + env(safe-area-inset-left));bottom:96px;width:60px;height:60px}
+    #btn-ads{right:calc(168px + env(safe-area-inset-right));bottom:156px;width:50px;height:50px}
     #btn-reload{right:calc(26px + env(safe-area-inset-right));bottom:20px;width:54px;height:54px}
     #btn-jump{right:calc(100px + env(safe-area-inset-right));bottom:52px;width:56px;height:56px}
     #btn-crouch{right:calc(100px + env(safe-area-inset-right));bottom:118px;width:50px;height:50px}
@@ -156,9 +161,11 @@
 </div>
 
 <div id="mobile-controls">
-  <div id="joystick-zone"><div id="joystick-knob"></div></div>
+  <div id="joystick-zone"><div id="joy-base"><div id="joystick-knob"></div></div></div>
   <div id="touch-look"></div>
   <div id="btn-shoot" class="mob-btn">FIRE</div>
+  <div id="btn-fire2" class="mob-btn">FIRE</div>
+  <div id="btn-ads" class="mob-btn">⌖</div>
   <div id="btn-jump" class="mob-btn">🦘</div>
   <div id="btn-crouch" class="mob-btn">⬇</div>
   <div id="btn-reload" class="mob-btn">🔄</div>
@@ -194,7 +201,9 @@
   <button type="button" id="btn-land" style="display:none;background:#34506b" onclick="goLandscape(event)">⛶ Полный экран · горизонтально</button>
   <div id="mob-opts"><span>Если управление ведёт себя наоборот:</span>
     <label><input type="checkbox" data-k="invJoyY"> джойстик ↕</label> <label><input type="checkbox" data-k="invJoyX"> джойстик ↔</label>
-    <label><input type="checkbox" data-k="invLookY"> обзор ↕</label> <label><input type="checkbox" data-k="invLookX"> обзор ↔</label></div>
+    <label><input type="checkbox" data-k="invLookY"> обзор ↕</label> <label><input type="checkbox" data-k="invLookX"> обзор ↔</label>
+    <label><input type="checkbox" data-k="autoFire"> авто-огонь</label>
+    <label>чувств. <input type="range" data-k="sens" min="0.3" max="2.5" step="0.1" style="width:90px;vertical-align:middle"></label></div>
 </div>
 
 <div id="wmenu" class="overlay">
@@ -1055,6 +1064,45 @@ function rayDist(ox, oy, oz, dx, dy, dz){
   return Math.min(best, 60);
 }
 
+function aimAssist(){
+  const w = getActiveWeapon();
+  if(!w) return;
+  const cp = Math.cos(P.pitch);
+  const dir = {x:Math.sin(P.yaw)*cp, y:Math.sin(P.pitch), z:-Math.cos(P.yaw)*cp};
+  let best = null, bestA = 0.075;
+  const check = (x, y, z) => {
+    const dx = x-P.x, dy = y-(P.y+eyeOff), dz = z-P.z;
+    const d = Math.hypot(dx, dy, dz) || 1;
+    const dot = (dx*dir.x + dy*dir.y + dz*dir.z) / d;
+    if(dot <= 0) return;
+    const ang = Math.acos(Math.min(1, dot));
+    if(ang < bestA){ bestA = ang; best = {yaw:Math.atan2(dx, -dz), pitch:Math.asin(Math.max(-1, Math.min(1, dy/d)))}; }
+  };
+  bots.forEach(b => { if(b.alive && b.team !== P.team) check(b.x, b.y + 1.0, b.z); });
+  netPlayers.forEach(p => { if(p.alive && p.team !== P.team) check(p.x, p.y + 1.0, p.z); });
+  if(best){
+    let dyaw = best.yaw - P.yaw;
+    while(dyaw > Math.PI) dyaw -= 2*Math.PI;
+    while(dyaw < -Math.PI) dyaw += 2*Math.PI;
+    P.yaw += dyaw * 0.55;
+    P.pitch = Math.max(-1.5, Math.min(1.5, P.pitch + (best.pitch - P.pitch) * 0.55));
+  }
+}
+
+function autoFireCheck(){
+  const w = getActiveWeapon();
+  if(!w || fireCd > 0 || ammo <= 0 || reloading) return;
+  const cp = Math.cos(P.pitch);
+  const dx = Math.sin(P.yaw)*cp, dy = Math.sin(P.pitch), dz = -Math.cos(P.yaw)*cp;
+  let onTarget = false;
+  bots.forEach(b => {
+    if(onTarget || !b.alive || b.team === P.team) return;
+    const t = rayAABB(P.x, P.y + eyeOff, P.z, dx, dy, dz, {x:b.x, y:b.y+0.9, z:b.z, sx:0.8, sy:1.8, sz:0.8});
+    if(t !== null && t < w.range) onTarget = true;
+  });
+  if(onTarget) shoot();
+}
+
 function shoot(){
   if(!playing || !roundActive || reloading > 0) return;
   const w = getActiveWeapon();
@@ -1101,6 +1149,7 @@ function shoot(){
   ammo--;
   fireCd = w.delay;
   const crouching = keys['KeyC'] || crouchToggle;
+  if(isMobile) aimAssist();
   const moveMul = P.airborne ? 4.0 : P.moving ? 1.8 : 1.0;
   const bloomPow = (w.type === 'rifle' || w.type === 'mg') ? 2.0 : 1.0;
   spreadHeat = Math.min(1, spreadHeat + (w.auto ? (0.03 + 0.4 * spreadHeat * spreadHeat) * bloomPow : 0.3));
@@ -1618,39 +1667,48 @@ try{ Object.assign(mobCfg, JSON.parse(localStorage.getItem('fypd_mobcfg') || '{}
 if(isMobile){
   const box = document.getElementById('mob-opts'); box.style.display = 'flex';
   box.querySelectorAll('input').forEach(i => {
+    if(i.type === 'range'){
+      i.value = mobCfg[i.dataset.k] || 1;
+      i.addEventListener('input', () => { mobCfg[i.dataset.k] = parseFloat(i.value); try{ localStorage.setItem('fypd_mobcfg', JSON.stringify(mobCfg)); }catch(e){} });
+      return;
+    }
     i.checked = !!mobCfg[i.dataset.k];
     i.addEventListener('change', () => { mobCfg[i.dataset.k] = i.checked; try{ localStorage.setItem('fypd_mobcfg', JSON.stringify(mobCfg)); }catch(e){} });
   });
 }
 if(isMobile){
   const zone = document.getElementById('joystick-zone');
+  const base = document.getElementById('joy-base');
   const knob = document.getElementById('joystick-knob');
-  let jTouchId = null;
-  
+  let jTouchId = null, jCx = 0, jCy = 0;
+  const joyMaxR = 60;
+
   zone.addEventListener('touchstart', e => {
     if(jTouchId !== null) return;
-    const t = e.changedTouches[0]; jTouchId = t.identifier; updateJoystick(t);
+    const t = e.changedTouches[0]; jTouchId = t.identifier;
+    const zr = zone.getBoundingClientRect();
+    jCx = t.clientX; jCy = t.clientY;
+    base.style.left = (jCx - zr.left) + 'px'; base.style.top = (jCy - zr.top) + 'px'; base.style.display = 'block';
+    mobMove = {x:0, y:0};
   });
   zone.addEventListener('touchmove', e => {
     for(let t of e.changedTouches){ if(t.identifier === jTouchId) updateJoystick(t); }
   });
   function endJoystick(e){
     for(let t of e.changedTouches){
-      if(t.identifier === jTouchId){ jTouchId = null; mobMove = {x:0, y:0}; knob.style.transform = `translate(0px, 0px)`; }
+      if(t.identifier === jTouchId){ jTouchId = null; mobMove = {x:0, y:0}; base.style.display = 'none'; knob.style.transform = `translate(0px, 0px)`; }
     }
   }
-  window.__resetJoy = () => { jTouchId = null; mobMove = {x:0, y:0}; knob.style.transform = 'translate(0px, 0px)'; };
+  window.__resetJoy = () => { jTouchId = null; mobMove = {x:0, y:0}; base.style.display = 'none'; knob.style.transform = 'translate(0px, 0px)'; };
   zone.addEventListener('touchend', endJoystick);
   zone.addEventListener('touchcancel', endJoystick);
 
   function updateJoystick(t){
-    const rect = zone.getBoundingClientRect();
-    const cx = rect.left + rect.width/2; const cy = rect.top + rect.height/2;
-    let dx = t.clientX - cx; let dy = t.clientY - cy;
-    const dist = Math.hypot(dx, dy), maxR = rect.width*0.35;
-    if(dist > maxR){ dx = (dx/dist)*maxR; dy = (dy/dist)*maxR; }
+    let dx = t.clientX - jCx, dy = t.clientY - jCy;
+    const dist = Math.hypot(dx, dy);
+    if(dist > joyMaxR){ dx = (dx/dist)*joyMaxR; dy = (dy/dist)*joyMaxR; }
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
-    mobMove = {x: (mobCfg.invJoyX ? -1 : 1)*dx/maxR, y: (mobCfg.invJoyY ? -1 : 1)*dy/maxR};
+    mobMove = {x: (mobCfg.invJoyX ? -1 : 1)*dx/joyMaxR, y: (mobCfg.invJoyY ? -1 : 1)*dy/joyMaxR};
   }
 
   const lookArea = document.getElementById('touch-look');
@@ -1664,7 +1722,9 @@ if(isMobile){
       if(t.identifier === lTouchId){
         const dx = t.clientX - lastLx, dy = t.clientY - lastLy;
         lastLx = t.clientX; lastLy = t.clientY;
-        P.yaw += dx * 0.005 * (mobCfg.invLookX ? -1 : 1); P.pitch -= dy * 0.005 * (mobCfg.invLookY ? -1 : 1);
+        const zw = getActiveWeapon();
+        const sens = (mobCfg.sens || 1) * ((zoomed && zw && zw.zoom) ? 0.4 : 1);
+        P.yaw += dx * 0.005 * sens * (mobCfg.invLookX ? -1 : 1); P.pitch -= dy * 0.005 * sens * (mobCfg.invLookY ? -1 : 1);
         P.pitch = Math.max(-1.5, Math.min(1.5, P.pitch));
       }
     }
@@ -1672,8 +1732,13 @@ if(isMobile){
   function endLook(e){ for(let t of e.changedTouches){ if(t.identifier === lTouchId) lTouchId = null; } }
   lookArea.addEventListener('touchend', endLook); lookArea.addEventListener('touchcancel', endLook);
 
-  document.getElementById('btn-shoot').addEventListener('touchstart', e => { e.preventDefault(); mouseDown = true; shoot(); });
-  document.getElementById('btn-shoot').addEventListener('touchend', e => { e.preventDefault(); mouseDown = false; });
+  const fireStart = e => { e.preventDefault(); mouseDown = true; shoot(); };
+  const fireEnd = e => { e.preventDefault(); mouseDown = false; };
+  document.getElementById('btn-shoot').addEventListener('touchstart', fireStart);
+  document.getElementById('btn-shoot').addEventListener('touchend', fireEnd);
+  document.getElementById('btn-fire2').addEventListener('touchstart', fireStart);
+  document.getElementById('btn-fire2').addEventListener('touchend', fireEnd);
+  document.getElementById('btn-ads').addEventListener('touchstart', e => { e.preventDefault(); const w = getActiveWeapon(); if(w && w.zoom) zoomed = !zoomed; });
   document.getElementById('btn-jump').addEventListener('touchstart', e => { e.preventDefault(); keys['Space'] = true; });
   document.getElementById('btn-jump').addEventListener('touchend', e => { e.preventDefault(); keys['Space'] = false; });
   document.getElementById('btn-crouch').addEventListener('touchstart', e => { e.preventDefault(); crouchToggle = !crouchToggle; });
@@ -1717,6 +1782,7 @@ function frame(now){
   const dt = Math.min((now - last)/1000, 0.05);
   last = now;
   if(playing && !orientBlocked) update(dt, now/1000);
+  if(playing && !orientBlocked && isMobile && mobCfg.autoFire && roundActive && wmenuEl.style.display !== 'flex') autoFireCheck();
   netPublish(now);
   if(!orientBlocked) draw(now/1000);
   requestAnimationFrame(frame);
@@ -1727,7 +1793,7 @@ function update(dt, t){
     const inPool = !!(inAnyPool(P.x, P.z, 0) && P.y < -0.2);
     let isCrouching = keys['KeyC'] || crouchToggle;
     eyeOff += ((isCrouching ? 0.95 : 1.65) - eyeOff) * Math.min(1, dt * 10);
-    let currentSpeed = P.speed * (isCrouching ? 0.5 : 1.0) * (inPool ? 0.55 : 1.0) * (keys['ShiftLeft'] ? 1.4 : 1.0) * (P.armor === 1 ? 0.67 : 1.0);
+    let currentSpeed = P.speed * (isCrouching ? 0.5 : 1.0) * (inPool ? 0.55 : 1.0) * (P.armor === 1 ? 0.67 : 1.0);
 
     const cy = Math.cos(P.yaw), sy = Math.sin(P.yaw);
     let mx = 0, mz = 0, mag = 1;
@@ -1746,8 +1812,9 @@ function update(dt, t){
     P.moving = (mx !== 0 || mz !== 0);
     if(P.moving){
       const l = Math.hypot(mx, mz) || 1;
-      P.x += (mx/l) * currentSpeed * mag * dt;
-      P.z += (mz/l) * currentSpeed * mag * dt;
+      const sprint = (keys['ShiftLeft'] || (isMobile && mag > 0.92)) ? 1.4 : 1.0;
+      P.x += (mx/l) * currentSpeed * mag * sprint * dt;
+      P.z += (mz/l) * currentSpeed * mag * sprint * dt;
       walkTimer += dt * 10;
     }
 
