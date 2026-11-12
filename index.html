@@ -101,7 +101,6 @@
   #btn-jump{right:120px;bottom:90px;width:60px;height:60px}
   #btn-crouch{right:190px;bottom:90px;width:60px;height:60px}
   #btn-reload{right:30px;bottom:80px;width:60px;height:60px}
-  #btn-buy{right:120px;bottom:160px;width:60px;height:60px;background:rgba(40,120,200,0.6)}
   #btn-switch{left:170px;bottom:40px;width:65px;height:65px;background:rgba(120,80,200,0.6);border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;pointer-events:auto;touch-action:manipulation;position:fixed}
 
   /* Мобильный HUD: показатели сверху, чтобы не перекрывать джойстик (портрет и ландшафт) */
@@ -120,7 +119,6 @@
     #btn-reload{right:calc(26px + env(safe-area-inset-right));bottom:20px;width:54px;height:54px}
     #btn-jump{right:calc(100px + env(safe-area-inset-right));bottom:52px;width:56px;height:56px}
     #btn-crouch{right:calc(100px + env(safe-area-inset-right));bottom:118px;width:50px;height:50px}
-    #btn-buy{right:calc(168px + env(safe-area-inset-right));bottom:92px;width:50px;height:50px}
     #btn-switch{left:calc(150px + env(safe-area-inset-left));bottom:20px;width:54px;height:54px}
     .overlay{gap:8px;padding:8px;overflow:auto}
     .overlay h1{font-size:22px}
@@ -169,7 +167,6 @@
   <div id="btn-jump" class="mob-btn">🦘</div>
   <div id="btn-crouch" class="mob-btn">⬇</div>
   <div id="btn-reload" class="mob-btn">🔄</div>
-  <div id="btn-buy" class="mob-btn">🛒</div>
   <div id="btn-switch">🔪/🔫</div>
 </div>
 
@@ -1750,7 +1747,6 @@ if(isMobile){
   document.getElementById('btn-jump').addEventListener('touchend', e => { e.preventDefault(); keys['Space'] = false; });
   document.getElementById('btn-crouch').addEventListener('touchstart', e => { e.preventDefault(); crouchToggle = !crouchToggle; });
   document.getElementById('btn-reload').addEventListener('touchstart', e => { e.preventDefault(); reload(); });
-  document.getElementById('btn-buy').addEventListener('touchstart', e => { e.preventDefault(); if(roundActive) openBuyMenu(); });
   document.getElementById('btn-switch').addEventListener('touchstart', e => { e.preventDefault(); cycleWeaponSlot(); tryPickupWeapon(); });
 }
 
