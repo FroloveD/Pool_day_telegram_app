@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>fy_pool_day — CS 1.6 Classic Arena</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://telegram.org/js/telegram-web-app.js" crossorigin="anonymous"></script>
 <script src="telegram-config.js"></script>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;user-select:none;touch-action:none}
@@ -38,6 +38,10 @@
     100%{opacity:0;transform:translate(-50%,-110px)}
   }
   #err{position:fixed;left:10px;top:10px;font-size:14px;color:#ff4444;text-shadow:0 1px 2px #000;white-space:pre-wrap;z-index:99999;background:rgba(0,0,0,0.9);padding:12px;border-radius:6px;max-width:500px;border:1px solid #ff4444;display:none}
+  #rotate-hint{display:none;position:fixed;inset:0;z-index:99998;background:#0a0e14;color:#cfe3ff;font:600 20px/1.5 system-ui,sans-serif;align-items:center;justify-content:center;text-align:center;flex-direction:column;gap:10px}
+  #rotate-hint .ico{font-size:56px;animation:rotphone 1.6s ease-in-out infinite alternate}
+  @keyframes rotphone{from{transform:rotate(0)}to{transform:rotate(90deg)}}
+  @media (orientation:portrait){ body.force-landscape #rotate-hint{display:flex} }
   
   .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(0,10,25,.96);color:#fff;text-align:center;z-index:10;pointer-events:auto}
   .overlay h1{margin:0;font-size:32px;color:#ffd76e}
@@ -134,6 +138,7 @@
 <body>
 <div id="rotate"><div class="ph"></div><p>Игра работает только в горизонтальной ориентации.<br>Поверните устройство набок.</p><button type="button" onclick="goLandscape(event)">⛶ Во весь экран · горизонтально</button></div>
 <div id="err"></div>
+<div id="rotate-hint"><div class="ico">📱</div>Поверните телефон горизонтально<br><span style="font-size:14px;opacity:.7">игра идёт только в альбомном режиме</span></div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="cross"><i></i><i></i><i></i><i></i></div>
@@ -216,6 +221,7 @@ const isHandheld = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Op
 let orientBlocked = false;
 function applyControlsMode(){
   document.body.classList.toggle('mob-visible', isMobile);
+  document.body.classList.toggle('force-landscape', isHandheld);
   document.getElementById('controls-desc').innerHTML = isMobile
     ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Игра работает в горизонтальной ориентации.'
     : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие<br><span class="kbd">+</span>/<span class="kbd">−</span> союзники ± · <span class="kbd">Ctrl +</span>/<span class="kbd">Ctrl −</span> противники ±<br>⚠ Приседай на <span class="kbd">C</span>: Ctrl+W браузер закрывает вкладку';
@@ -232,6 +238,10 @@ function toggleControlsMode(ev){
   applyControlsMode();
 }
 applyControlsMode();
+window.addEventListener('touchstart', function forceOrientOnce(){
+  window.removeEventListener('touchstart', forceOrientOnce);
+  if(isHandheld) goLandscape();
+}, {once:true, passive:true});
 
 function goLandscape(ev){
   if(ev) ev.stopPropagation();
@@ -248,9 +258,20 @@ function showError(txt){
   if(el){ el.textContent = txt; el.style.display = 'block'; }
 }
 
-window.onerror = function(msg, url, line){
-  showError('JS Error: ' + msg + '\nLine: ' + line);
+window.onerror = function(msg, url, line, col, err){
+  let t = 'JS Error: ' + msg + '\nLine: ' + line + (col ? ':' + col : '');
+  if(err && err.stack) t += '\n' + String(err.stack).split('\n').slice(0,4).join('\n');
+  showError(t);
 };
+window.addEventListener('unhandledrejection', function(ev){
+  const r = ev.reason;
+  const t = (r && r.stack) ? String(r.stack).split('\n').slice(0,3).join('\n') : ((r && r.message) || String(r));
+  showError('Promise: ' + t);
+});
+window.addEventListener('error', function(ev){
+  const t = ev.target;
+  if(t && t !== window && t.tagName && /^(SCRIPT|IMG|AUDIO|LINK)$/.test(t.tagName)) showError('Не загрузился ресурс: ' + (t.src || t.href || ''));
+}, true);
 
 // Ctrl+W браузер перехватить не может — во время матча спрашиваем подтверждение закрытия
 window.addEventListener('beforeunload', e => {
@@ -1547,6 +1568,7 @@ function openBuyMenu(){
 function startBuyingProcess(ev){
   if(ev) ev.stopPropagation();
   ensureAudio();
+  if(isHandheld) goLandscape();
   playing = true;
   startEl.style.display = 'none';
   const ro = document.getElementById('roundover');
