@@ -1361,7 +1361,9 @@ function netConnect(){
           p = {netId:m.id, name:m.name || 'Игрок', team:m.team || 'blue', model:BOT_MODELS[0], weapon:WEAPONS.find(w=>w.name==='AK-47'), alive:true, hp:100,maxHp:100,y:0,vy:0,rotY:0,yawS:0,pitchS:0,aim:1,walkT:0,spd:0,vx:0,vz:0,kick:0,flash:0,diedAt:0,fr:0,de:0,seed:Math.random()*6};
           netPlayers.set(m.id,p);
         }
-        Object.assign(p,{name:m.name||p.name,team:m.team||p.team,x:m.x||0,y:m.y||0,z:m.z||0,yaw:m.yaw||0,rotY:m.yaw||0,yawS:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
+        Object.assign(p,{name:m.name||p.name,team:m.team||p.team,yaw:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
+        p.nx=m.x||0; p.ny=m.y||0; p.nz=m.z||0; p.nyaw=m.yaw||0;
+        if(p.x === undefined || p.x === null){ p.x=p.nx; p.y=p.ny; p.z=p.nz; p.rotY=p.nyaw; p.yawS=p.nyaw; }
       } else if(m.type === 'peerLeft'){
         removeTag(netPlayers.get(m.id));
         netPlayers.delete(m.id);
@@ -1370,7 +1372,13 @@ function netConnect(){
         netStatus(netIsHost ? 'Вы стали хостом матча.' : 'Хост матча изменился.');
         updateBotPanel();
       } else if(m.type === 'botState' && !netIsHost){
-        (m.bots||[]).forEach((v,i)=>{ let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; } Object.assign(b,v); b.weapon=WEAPONS.find(w=>w.name===v.weapon)||b.weapon; });
+        (m.bots||[]).forEach((v,i)=>{
+          let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; }
+          b.nx=v.x; b.ny=v.y; b.nz=v.z; b.nrotY=v.rotY; b.nyawS=v.yawS===undefined?v.rotY:v.yawS;
+          const px=b.x, py=b.y, pz=b.z, pr=b.rotY, pys=b.yawS;
+          Object.assign(b,v); b.x=px; b.y=py; b.z=pz; b.rotY=pr; b.yawS=pys;
+          b.weapon=WEAPONS.find(w=>w.name===v.weapon)||b.weapon;
+        });
         while(bots.length > (m.bots||[]).length){ const rb2 = bots.pop(); if(rb2 && rb2.tagEl) rb2.tagEl.remove(); }
         if(m.score){ scoreMe=m.score.red||0; scoreBots=m.score.blue||0; }
         if(typeof m.timeLeft === 'number') roundTimeLeft = Math.max(0, m.timeLeft);
@@ -1431,11 +1439,11 @@ function netPublish(now){
   if(now-netLastSend>50){
     netLastSend=now;
     const w=getActiveWeapon();
-    netSend({type:'player',x:P.x,y:P.y,z:P.z,yaw:P.yaw,pitch:P.pitch,hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths});
+    netSend({type:'player',x:+P.x.toFixed(3),y:+P.y.toFixed(3),z:+P.z.toFixed(3),yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths});
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
+    netSend({type:'botState',bots:bots.map(b=>({x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
   }
 }
 
@@ -1809,6 +1817,21 @@ function frame(now){
   last = now;
   if(playing && !orientBlocked) update(dt, now/1000);
   if(playing && !orientBlocked && isMobile && mobCfg.autoFire && roundActive && wmenuEl.style.display !== 'flex') autoFireCheck();
+  const ipk = 1 - Math.exp(-dt*14);
+  netPlayers.forEach(p => {
+    if(p.nx === undefined) return;
+    p.x += (p.nx - p.x)*ipk; p.y += (p.ny - p.y)*ipk; p.z += (p.nz - p.z)*ipk;
+    let dy = p.nyaw - p.rotY; dy = ((dy + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI;
+    p.rotY += dy*ipk; p.yawS = p.rotY; p.yaw = p.rotY;
+  });
+  if(netConnected && !netIsHost) bots.forEach(b => {
+    if(b.nx === undefined) return;
+    b.x += (b.nx - b.x)*ipk; b.y += (b.ny - b.y)*ipk; b.z += (b.nz - b.z)*ipk;
+    let dy = b.nrotY - b.rotY; dy = ((dy + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI;
+    b.rotY += dy*ipk;
+    let dy2 = b.nyawS - b.yawS; dy2 = ((dy2 + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI;
+    b.yawS += dy2*ipk;
+  });
   netPublish(now);
   if(!orientBlocked) draw(now/1000);
   requestAnimationFrame(frame);
