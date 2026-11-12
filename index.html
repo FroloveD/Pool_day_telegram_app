@@ -407,9 +407,11 @@ function initGL(){
   }
 }
 
-function makeTex(draw){
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const x = c.getContext('2d'); draw(x, 256);
+// Генерация текстуры на canvas: рисуем процедурно и заливаем в WebGL с мипмапами
+// (size — сторона, по умолчанию 256; крупные текстуры 512 дают заметно больше деталей)
+function makeTex(draw, size){
+  const c = document.createElement('canvas'); c.width = c.height = size || 256;
+  const x = c.getContext('2d'); draw(x, c.width);
   const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
   gl.generateMipmap(gl.TEXTURE_2D);
@@ -425,6 +427,45 @@ function noise(x, S, n, alpha, dark){
     const g = Math.random()*255|0;
     x.fillStyle = 'rgba('+(dark?255-g:g)+','+(dark?255-g:g)+','+(dark?255-g:g)+','+alpha+')';
     x.fillRect(Math.random()*S, Math.random()*S, 1+Math.random()*2, 1+Math.random()*2);
+  }
+}
+// Мягкие разводы (влага, грязь, потёртости): радиальный градиент от центра к нулю.
+// Рисуем в 9 позициях (с обёрткой по краям), чтобы текстура бесшовно тайлилась
+function blotches(x, S, n, rmax, alpha, dark){
+  const v = dark ? '18,24,30' : '235,240,245';
+  for(let i=0; i<n; i++){
+    const cx = Math.random()*S, cy = Math.random()*S, r = (0.3+Math.random()*0.7)*rmax;
+    for(let dx=-1; dx<=1; dx++) for(let dy=-1; dy<=1; dy++){
+      const g = x.createRadialGradient(cx+dx*S, cy+dy*S, 0, cx+dx*S, cy+dy*S, r);
+      g.addColorStop(0, 'rgba('+v+','+alpha+')'); g.addColorStop(1, 'rgba('+v+',0)');
+      x.fillStyle = g; x.beginPath(); x.arc(cx+dx*S, cy+dy*S, r, 0, 6.283); x.fill();
+    }
+  }
+}
+// Обход сетки ячеек (плитка/доски): cb(px,py,w,h) для каждой ячейки
+function eachTile(S, step, cb){
+  for(let py=0; py<S; py+=step) for(let px=0; px<S; px+=step) cb(px, py, step, step);
+}
+// Волокна дерева: волнистые горизонтальные штрихи чуть разной толщины и тона
+function grain(x, S, n, alpha){
+  for(let i=0; i<n; i++){
+    const y = Math.random()*S;
+    x.strokeStyle = 'rgba(58,36,14,'+(alpha*(0.4+Math.random()*0.6))+')';
+    x.lineWidth = 0.6+Math.random()*1.2;
+    x.beginPath(); x.moveTo(0, y);
+    let px = 0, py = y;
+    for(let sx = 32; sx <= S; sx += 32){ const ny = y+(Math.random()*8-4); x.quadraticCurveTo(px+16, py+(Math.random()*6-3), sx, ny); px = sx; py = ny; }
+    x.stroke();
+  }
+}
+// Тонкие трещины: ломаная из 6 случайных сегментов
+function cracks(x, S, n){
+  for(let i=0; i<n; i++){
+    let px = Math.random()*S, py = Math.random()*S;
+    x.strokeStyle = 'rgba(40,48,56,0.4)'; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(px, py);
+    for(let k=0; k<6; k++){ px += Math.random()*24-12; py += Math.random()*24-12; x.lineTo(px, py); }
+    x.stroke();
   }
 }
 
@@ -464,31 +505,87 @@ function initMeshes(){
 
 function initBuffers(){
   try {
+    // Керамическая плитка бассейна: у каждой плитки свой оттенок, объёмная фаска
+    // (свет сверху-слева, тень снизу-справа), тёмная затирка, зерно, разводы влаги и трещины
     TEX.tile = makeTex((x, S) => {
       x.fillStyle = '#d0d7de'; x.fillRect(0, 0, S, S);
-      noise(x, S, 800, 0.04, true);
-      x.strokeStyle = '#b0b8c0'; x.lineWidth = 2;
+      eachTile(S, 32, (px, py, w, h) => {
+        x.fillStyle = 'rgba('+(Math.random()<0.5?'255,255,255':'35,45,55')+','+(Math.random()*0.07)+')';
+        x.fillRect(px, py, w, h);
+        x.fillStyle = 'rgba(255,255,255,0.22)'; x.fillRect(px, py, w, 1); x.fillRect(px, py, 1, h);
+        x.fillStyle = 'rgba(30,40,50,0.28)'; x.fillRect(px, py+h-1, w, 1); x.fillRect(px+w-1, py, 1, h);
+      });
+      x.strokeStyle = 'rgba(105,115,125,0.85)'; x.lineWidth = 2;
       for(let i=0; i<=S; i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,S); x.stroke(); x.beginPath(); x.moveTo(0,i); x.lineTo(S,i); x.stroke(); }
-    });
+      noise(x, S, 2400, 0.05, true);
+      blotches(x, S, 24, 34, 0.05, true);
+      cracks(x, S, 3);
+    }, 512);
+    // Красная плитка: та же схема, свои тона затирки и фаски
     TEX.rtile = makeTex((x, S) => {
       x.fillStyle = '#992d2d'; x.fillRect(0, 0, S, S);
-      noise(x, S, 800, 0.05, true);
-      x.strokeStyle = '#772020'; x.lineWidth = 2;
+      eachTile(S, 32, (px, py, w, h) => {
+        x.fillStyle = 'rgba('+(Math.random()<0.5?'255,200,190':'40,10,10')+','+(Math.random()*0.08)+')';
+        x.fillRect(px, py, w, h);
+        x.fillStyle = 'rgba(255,210,200,0.2)'; x.fillRect(px, py, w, 1); x.fillRect(px, py, 1, h);
+        x.fillStyle = 'rgba(45,12,12,0.3)'; x.fillRect(px, py+h-1, w, 1); x.fillRect(px+w-1, py, 1, h);
+      });
+      x.strokeStyle = 'rgba(95,28,28,0.9)'; x.lineWidth = 2;
       for(let i=0; i<=S; i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,S); x.stroke(); x.beginPath(); x.moveTo(0,i); x.lineTo(S,i); x.stroke(); }
-    });
+      noise(x, S, 2400, 0.05, true);
+      blotches(x, S, 24, 34, 0.06, true);
+      cracks(x, S, 3);
+    }, 512);
+    // Синяя плитка: та же схема, свои тона затирки и фаски
     TEX.btile = makeTex((x, S) => {
       x.fillStyle = '#2d4488'; x.fillRect(0, 0, S, S);
-      noise(x, S, 800, 0.05, true);
-      x.strokeStyle = '#1d3066'; x.lineWidth = 2;
+      eachTile(S, 32, (px, py, w, h) => {
+        x.fillStyle = 'rgba('+(Math.random()<0.5?'190,215,255':'12,22,55')+','+(Math.random()*0.08)+')';
+        x.fillRect(px, py, w, h);
+        x.fillStyle = 'rgba(200,220,255,0.2)'; x.fillRect(px, py, w, 1); x.fillRect(px, py, 1, h);
+        x.fillStyle = 'rgba(15,25,60,0.3)'; x.fillRect(px, py+h-1, w, 1); x.fillRect(px+w-1, py, 1, h);
+      });
+      x.strokeStyle = 'rgba(28,44,90,0.9)'; x.lineWidth = 2;
       for(let i=0; i<=S; i+=32){ x.beginPath(); x.moveTo(i,0); x.lineTo(i,S); x.stroke(); x.beginPath(); x.moveTo(0,i); x.lineTo(S,i); x.stroke(); }
-    });
-    TEX.dark = makeTex((x, S) => { x.fillStyle = '#2a2e35'; x.fillRect(0, 0, S, S); noise(x, S, 1500, 0.08, false); });
+      noise(x, S, 2400, 0.05, true);
+      blotches(x, S, 24, 34, 0.06, true);
+      cracks(x, S, 3);
+    }, 512);
+    // Бетон/метал тёмных стен: крупные тёмные разводы сырости, светлые потёртости,
+    // вертикальные потёки воды с затуханием и мелкое зерно
+    TEX.dark = makeTex((x, S) => {
+      x.fillStyle = '#2a2e35'; x.fillRect(0, 0, S, S);
+      blotches(x, S, 55, 45, 0.07, true);
+      blotches(x, S, 35, 30, 0.05, false);
+      for(let i=0; i<12; i++){
+        const sx = Math.random()*S, w = 2+Math.random()*5, l = S*(0.2+Math.random()*0.6), sy = Math.random()*(S-l);
+        const g = x.createLinearGradient(0, sy, 0, sy+l);
+        g.addColorStop(0, 'rgba(14,17,21,0.14)'); g.addColorStop(0.5, 'rgba(14,17,21,0.06)'); g.addColorStop(1, 'rgba(14,17,21,0)');
+        x.fillStyle = g; x.fillRect(sx, sy, w, l);
+      }
+      noise(x, S, 3200, 0.07, true);
+    }, 512);
+    // Деревянный ящик: доски по 1/6 высоты — каждая своего оттенка, с тёмным
+    // стыком и светлой кромкой; волокна, пятна, каркас с диагоналями и гвозди
     TEX.box = makeTex((x, S) => {
       x.fillStyle = '#8b5a2b'; x.fillRect(0, 0, S, S);
-      noise(x, S, 1200, 0.08, true);
-      x.strokeStyle = '#5c3a1a'; x.lineWidth = 6; x.strokeRect(3,3,S-6,S-6);
+      const ph = S/6;
+      for(let i=0; i<6; i++){
+        x.fillStyle = 'rgba('+(Math.random()<0.5?'255,220,160':'50,30,10')+','+(Math.random()*0.08)+')';
+        x.fillRect(0, i*ph, S, ph);
+        x.fillStyle = 'rgba(30,18,6,0.5)'; x.fillRect(0, i*ph, S, 2);
+        x.fillStyle = 'rgba(255,230,190,0.18)'; x.fillRect(0, i*ph+2, S, 1);
+      }
+      grain(x, S, 90, 0.16);
+      blotches(x, S, 18, 26, 0.06, true);
+      noise(x, S, 1600, 0.06, true);
+      x.strokeStyle = '#5c3a1a'; x.lineWidth = 6; x.strokeRect(3, 3, S-6, S-6);
       x.beginPath(); x.moveTo(0,0); x.lineTo(S,S); x.moveTo(S,0); x.lineTo(0,S); x.stroke();
-    });
+      [[14,14],[S-14,14],[14,S-14],[S-14,S-14]].forEach(p => {
+        x.fillStyle = '#3a3d42'; x.beginPath(); x.arc(p[0], p[1], 3, 0, 6.283); x.fill();
+        x.fillStyle = 'rgba(255,255,255,0.35)'; x.beginPath(); x.arc(p[0]-1, p[1]-1, 1.2, 0, 6.283); x.fill();
+      });
+    }, 512);
 
     function face(nx, ny, nz, verts){
       const uvq = [[0,0],[1,0],[1,1],[0,1]], out = [];
