@@ -837,12 +837,13 @@ let ammo = 0, reloading = 0, fireCd = 0, zoomed = false;
 let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
 let roundTimeLeft = 300, roundOver = false, matchLive = false, roundWinner = null;
 let recoilOffset = 0, walkTimer = 0, dmgTimer = 0, dmgAngle = 0, spreadHeat = 0, stepT = 0, burstCount = 0, eyeOff = 1.65;
+let crouchToggle = false, ctrlPending = false;
 let statFrags = 0, statDeaths = 0;
 let buyingPhase = 1;
 
 const GW_NAMES=['AK-47','M4A1','AWP','MP5 Navy','P90','Famas','Desert Eagle','Scout','XM1014','M249','Galil','USP45','UMP45','Glock-18'];
-let groundWeapons=[], _gi=0;
-function dropW(px,py,y){ const nm=GW_NAMES[_gi++%GW_NAMES.length]; groundWeapons.push({x:wx(px),y:y,z:wz(py),rot:Math.random()*6.28,weapon:WEAPONS.find(w=>w.name===nm)}); }
+let groundWeapons=[], _gi=0, gwSeq=0;
+function dropW(px,py,y){ const nm=GW_NAMES[_gi++%GW_NAMES.length]; groundWeapons.push({id:gwSeq++,x:wx(px),y:y,z:wz(py),rot:Math.random()*6.28,weapon:WEAPONS.find(w=>w.name===nm)}); }
 [[452,312],[515,324],[456,366],[518,376],[487,408],[534,448]].forEach(p=>dropW(p[0],p[1],-DEPTH+0.15));
 [[240,312],[298,296],[357,296],[197,350],[245,378],[205,394],[240,416],[352,414],[314,531],[243,566],[272,596],[330,610]].forEach(p=>{dropW(p[0],p[1]); dropW(1024-p[0],p[1]);});
 
@@ -883,6 +884,8 @@ function cycleWeaponSlot(){
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
   if(playing && (e.ctrlKey || e.metaKey)) e.preventDefault();
+  if((e.code === 'ControlLeft' || e.code === 'ControlRight') && !e.repeat) ctrlPending = true;
+  if(e.ctrlKey && e.code !== 'ControlLeft' && e.code !== 'ControlRight') ctrlPending = false;
   if(e.code === 'Space') {
     keys['Space'] = true;
     e.preventDefault();
@@ -907,6 +910,10 @@ window.addEventListener('keyup', e => {
   keys[e.code] = false;
   if(e.code === 'Space') {
     keys['Space'] = false;
+  }
+  if((e.code === 'ControlLeft' || e.code === 'ControlRight') && playing && ctrlPending){
+    ctrlPending = false;
+    crouchToggle = !crouchToggle;
   }
 });
 
@@ -1072,7 +1079,7 @@ function shoot(){
 
   ammo--;
   fireCd = w.delay;
-  const crouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
+  const crouching = keys['KeyC'] || crouchToggle;
   const moveMul = P.airborne ? 4.0 : P.moving ? 1.8 : 1.0;
   const bloomPow = (w.type === 'rifle' || w.type === 'mg') ? 2.0 : 1.0;
   spreadHeat = Math.min(1, spreadHeat + (w.auto ? (0.03 + 0.4 * spreadHeat * spreadHeat) * bloomPow : 0.3));
@@ -1081,7 +1088,7 @@ function shoot(){
   recoilOffset = 0.08;
   beep('shot');
 
-  const oy = P.y + eyeOff + Math.sin(walkTimer) * 0.03;
+  const oy = P.y + eyeOff + ((zoomed && w.zoom) ? 0 : Math.sin(walkTimer) * 0.03);
   const cpb = Math.cos(P.pitch), dbx = Math.sin(P.yaw)*cpb, dby = Math.sin(P.pitch), dbz = -Math.cos(P.yaw)*cpb;
   const distMul = 1 + Math.min(2.5, rayDist(P.x, oy, P.z, dbx, dby, dbz) / 18);
   const firstShot = spreadHeat <= 0 && !P.moving && !P.airborne;
@@ -1143,7 +1150,7 @@ function shoot(){
 
 function killBot(b){
   b.alive = false; b.diedAt = performance.now();
-  if(b.weapon) groundWeapons.push({x:b.x, z:b.z, rot:Math.random()*6.28, weapon:b.weapon});
+  if(b.weapon) groundWeapons.push({id:gwSeq++, x:b.x, z:b.z, rot:Math.random()*6.28, weapon:b.weapon});
   setTimeout(() => {
     const sp = getTeamSpawn(b.team === 'blue', b);
     b.x = sp[0]; b.z = sp[1]; b.rotY = Math.atan2(-sp[0], -sp[1]); b.yawS = b.rotY; b.vx = b.vz = 0; b.spd = 0; b.aim = 0; b.hp = b.maxHp; b.alive = true; b.tgt = null; pickNav(b);
@@ -1160,9 +1167,14 @@ function tryPickupWeapon(){
       switchSlot(gw.weapon.slot);
       showMsg('Подобрано: ' + gw.weapon.name);
       groundWeapons.splice(i, 1);
+      if(netConnected && !netIsHost) netSend({type:'gwTaken', id:gw.id});
       break;
     }
   }
+}
+
+function syncGroundWeapons(list){
+  groundWeapons = (list||[]).map(g => ({id:g.i, x:g.x, y:(g.y===null?undefined:g.y), z:g.z, rot:g.r||0, weapon:WEAPONS.find(w=>w.name===g.w)})).filter(g=>g.weapon);
 }
 
 function applyPlayerDamage(dmg){
@@ -1249,13 +1261,13 @@ function netConnect(){
   netStatus('Подключение к серверу…');
   try{
     netSocket = new WebSocket(url);
-    netSocket.addEventListener('open', () => netSend({type:'join', room, team:netTeam, name:netName}));
+    netSocket.addEventListener('open', () => netSend({type:'join', room, team:netTeam, name:netName, initData:(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || ''}));
     netSocket.addEventListener('message', ev => {
       let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
       if(m.type === 'welcome'){
         netId = m.id; netIsHost = !!m.host; netConnected = true;
         P.team = netTeam; const nsp=getTeamSpawn(P.team === 'blue',P); P.x=nsp[0]; P.z=nsp[1];
-        netStatus(`В комнате ${room} · ${netIsHost ? 'вы хост матча' : 'подключено'} · команда ${netTeam === 'red' ? 'красных' : 'синих'}`);
+        netStatus(`В комнате ${room} · ${netIsHost ? 'вы хост матча' : 'подключено'} · команда ${netTeam === 'red' ? 'красных' : 'синих'}` + (m.verified ? ' · ✅ Telegram' : ''));
         const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='block';
         updateBotPanel();
         showMsg('Сеть подключена');
@@ -1279,18 +1291,22 @@ function netConnect(){
         if(m.score){ scoreMe=m.score.red||0; scoreBots=m.score.blue||0; }
         if(typeof m.timeLeft === 'number') roundTimeLeft = Math.max(0, m.timeLeft);
         if(m.armor){ armorPickup.active = !!m.armor.active; armorPickup.respawnAt = m.armor.respawnAt || 0; }
+        if(Array.isArray(m.gw)) syncGroundWeapons(m.gw);
         if(m.roundOver && !roundOver){ roundOver = true; roundActive = false; matchLive = false; roundWinner = m.winner || 'draw'; showRoundOver(roundWinner); }
         else if(!m.roundOver && roundOver){ roundOver = false; const ro=document.getElementById('roundover'); if(ro) ro.style.display='none'; }
       } else if(m.type === 'damage' && m.target === netId){
         P.hp = Math.max(0, P.hp - applyPlayerDamage(m.amount||0)); beep('hurt'); dmgTimer=0.8;
         if(P.hp <= 0){
           netSend({type:'frag',team:m.attackerTeam});
-          const sp=getTeamSpawn(P.team==='blue',P); P.x=sp[0];P.z=sp[1];P.y=0.1;P.vy=0;P.hp=100;P.armor=0;P.armorHp=0;P.armorMax=0;
+          const sp=getTeamSpawn(P.team==='blue',P); P.x=sp[0];P.z=sp[1];P.y=0.1;P.vy=0;P.hp=100;P.armor=0;P.armorHp=0;P.armorMax=0;crouchToggle=false;
           statDeaths++;
           showMsg('Вы выбыли · респаун');
         }
       } else if(m.type === 'armorTaken' && netIsHost){
         armorPickup.active = false; armorPickup.respawnAt = performance.now() + ARMOR_RESPAWN_MS;
+      } else if(m.type === 'gwTaken' && netIsHost){
+        const gi = groundWeapons.findIndex(g => g.id === m.id);
+        if(gi !== -1) groundWeapons.splice(gi, 1);
       } else if(m.type === 'botHit' && netIsHost){
         const b=bots[m.index];
         if(b && b.alive){
@@ -1335,7 +1351,7 @@ function netPublish(now){
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt}});
+    netSend({type:'botState',bots:bots.map(b=>({x:b.x,y:b.y,z:b.z,hp:b.hp,alive:b.alive,rotY:b.rotY,yawS:b.yawS,pitchS:b.pitchS,spd:b.spd,vx:b.vx,vz:b.vz,walkT:b.walkT,aim:b.aim,kick:b.kick,flash:b.flash,weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
   }
 }
 
@@ -1638,8 +1654,7 @@ if(isMobile){
   document.getElementById('btn-shoot').addEventListener('touchend', e => { e.preventDefault(); mouseDown = false; });
   document.getElementById('btn-jump').addEventListener('touchstart', e => { e.preventDefault(); keys['Space'] = true; });
   document.getElementById('btn-jump').addEventListener('touchend', e => { e.preventDefault(); keys['Space'] = false; });
-  document.getElementById('btn-crouch').addEventListener('touchstart', e => { e.preventDefault(); keys['ControlLeft'] = true; });
-  document.getElementById('btn-crouch').addEventListener('touchend', e => { e.preventDefault(); keys['ControlLeft'] = false; });
+  document.getElementById('btn-crouch').addEventListener('touchstart', e => { e.preventDefault(); crouchToggle = !crouchToggle; });
   document.getElementById('btn-reload').addEventListener('touchstart', e => { e.preventDefault(); reload(); });
   document.getElementById('btn-buy').addEventListener('touchstart', e => { e.preventDefault(); if(roundActive) openBuyMenu(); });
   document.getElementById('btn-switch').addEventListener('touchstart', e => { e.preventDefault(); cycleWeaponSlot(); tryPickupWeapon(); });
@@ -1688,7 +1703,7 @@ function frame(now){
 function update(dt, t){
   if(roundActive){
     const inPool = !!(inAnyPool(P.x, P.z, 0) && P.y < -0.2);
-    let isCrouching = keys['ControlLeft'] || keys['ControlRight'] || keys['KeyC'];
+    let isCrouching = keys['KeyC'] || crouchToggle;
     eyeOff += ((isCrouching ? 0.95 : 1.65) - eyeOff) * Math.min(1, dt * 10);
     let currentSpeed = P.speed * (isCrouching ? 0.5 : 1.0) * (inPool ? 0.55 : 1.0) * (keys['ShiftLeft'] ? 1.4 : 1.0) * (P.armor === 1 ? 0.67 : 1.0);
 
@@ -2101,7 +2116,7 @@ function draw(t){
   const fovA = (zoomed && w && w.zoom) ? fov : Math.max(fov, Math.min(1.9, 2*Math.atan(Math.tan(0.7)/asp)));
   const proj = persp(fovA, asp, 0.1, 200);
 
-  const bob = Math.sin(walkTimer) * 0.03;
+  const bob = (zoomed && w && w.zoom) ? 0 : Math.sin(walkTimer) * 0.03;
   const eye = { x: P.x, y: P.y + eyeOff + bob, z: P.z };
   const vp = mul(proj, view(eye.x, eye.y, eye.z, P.yaw, P.pitch));
   updateTags(vp, eye);

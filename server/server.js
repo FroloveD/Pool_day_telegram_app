@@ -1,4 +1,5 @@
 const WebSocket = require("ws");
+const crypto = require("crypto");
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
@@ -105,17 +106,28 @@ wss.on("connection", (ws) => {
         send(ws, { type: "notice", text: `Комната заполнена (лимит ${MAX_ROOM_PLAYERS})` });
         return ws.close(1008, "Room full");
       }
+      const initData = typeof msg.initData === "string" ? msg.initData : "";
+      let verified = false;
+      if (initData) {
+        const v = verifyInitData(initData);
+        if (!v.ok) {
+          send(ws, { type: "notice", text: "Подпись Telegram не прошла проверку" });
+          return ws.close(1008, "Bad signature");
+        }
+        verified = true;
+      }
       const id = cryptoId();
       const player = {
         id, name: safeName(msg.name),
         team: msg.team === "blue" ? "blue" : "red",
+        verified,
         x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: true
       };
       room.peers.set(id, { ws, player });
       if (!room.hostId) room.hostId = id;
       ws.room = room;
       ws.playerId = id;
-      send(ws, { type: "welcome", id, host: room.hostId === id, players: room.peers.size });
+      send(ws, { type: "welcome", id, host: room.hostId === id, players: room.peers.size, verified });
       for (const [otherId, peer] of room.peers) {
         if (otherId !== id) send(ws, { type: "peer", ...peer.player });
       }
@@ -159,7 +171,8 @@ wss.on("connection", (ws) => {
         timeLeft: Math.max(0, Math.min(3600, num(msg.timeLeft))),
         roundOver: !!msg.roundOver,
         winner: msg.winner === 'blue' ? 'blue' : msg.winner === 'red' ? 'red' : 'draw',
-        armor: { active: !!(msg.armor && msg.armor.active), respawnAt: Math.max(0, Math.min(600000, num(msg.armor && msg.armor.respawnAt))) }
+        armor: { active: !!(msg.armor && msg.armor.active), respawnAt: Math.max(0, Math.min(600000, num(msg.armor && msg.armor.respawnAt))) },
+        gw: Array.isArray(msg.gw) ? msg.gw.slice(0, 64).map((g) => ({ i: Math.max(0, Math.min(65535, Number(g.i) | 0)), x: num(g.x), y: g && g.y === null ? null : num(g && g.y), z: num(g.z), r: num(g.r), w: String(g.w || "").slice(0, 32) })) : []
       };
       broadcast(room, room.botState, id);
     } else if (msg.type === "botHit") {
@@ -188,6 +201,11 @@ wss.on("connection", (ws) => {
         const host = room.peers.get(room.hostId);
         if (host) send(host.ws, { type: "armorTaken" });
       }
+    } else if (msg.type === "gwTaken") {
+      if (room.hostId && room.hostId !== id) {
+        const host = room.peers.get(room.hostId);
+        if (host) send(host.ws, { type: "gwTaken", id: Math.max(0, Math.min(65535, Number(msg.id) | 0)) });
+      }
     }
   });
 
@@ -200,7 +218,28 @@ function num(v) {
   return Number.isFinite(n) ? Math.max(-10000, Math.min(10000, n)) : 0;
 }
 function cryptoId() {
-  return require("crypto").randomBytes(8).toString("hex");
+  return crypto.randomBytes(8).toString("hex");
+}
+function verifyInitData(initData) {
+  if (!BOT_TOKEN) return { ok: false };
+  try {
+    const params = new URLSearchParams(initData);
+    const hash = params.get("hash");
+    if (!hash) return { ok: false };
+    params.delete("hash");
+    const dataCheckString = [...params.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+    const secret = crypto.createHmac("sha256", "WebAppData").update(BOT_TOKEN).digest();
+    const computed = crypto.createHmac("sha256", secret).update(dataCheckString).digest("hex");
+    if (computed !== hash) return { ok: false };
+    const authDate = Number(params.get("auth_date") || 0);
+    if (!authDate || Date.now() / 1000 - authDate > 86400) return { ok: false };
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
 }
 
 const heartbeat = setInterval(() => {
