@@ -933,11 +933,11 @@ window.addEventListener('keydown', e => {
   if(e.code === 'KeyE') tryPickupWeapon();
   if((e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') && canManageBots()){
     e.preventDefault();
-    if(e.ctrlKey || e.metaKey) addBot('blue'); else addBot('red');
+    if(e.ctrlKey || e.metaKey) addBot(P.team === 'red' ? 'blue' : 'red'); else addBot(P.team);
   }
   if((e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') && canManageBots()){
     e.preventDefault();
-    if(e.ctrlKey || e.metaKey) removeBot('blue'); else removeBot('red');
+    if(e.ctrlKey || e.metaKey) removeBot(P.team === 'red' ? 'blue' : 'red'); else removeBot(P.team);
   }
 });
 
@@ -1362,7 +1362,7 @@ function netConnect(){
         updateBotPanel();
       } else if(m.type === 'botState' && !netIsHost){
         (m.bots||[]).forEach((v,i)=>{ let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; } Object.assign(b,v); b.weapon=WEAPONS.find(w=>w.name===v.weapon)||b.weapon; });
-        if(bots.length > (m.bots||[]).length) bots.length = (m.bots||[]).length;
+        while(bots.length > (m.bots||[]).length){ const rb2 = bots.pop(); if(rb2 && rb2.tagEl) rb2.tagEl.remove(); }
         if(m.score){ scoreMe=m.score.red||0; scoreBots=m.score.blue||0; }
         if(typeof m.timeLeft === 'number') roundTimeLeft = Math.max(0, m.timeLeft);
         if(m.armor){ armorPickup.active = !!m.armor.active; armorPickup.respawnAt = m.armor.respawnAt || 0; }
@@ -1438,7 +1438,7 @@ function spawnBot(i, team){
   const w = BOT_WEAPONS[Math.floor(Math.random()*BOT_WEAPONS.length)];
   bots.push({
     x: s[0], y: 0, z: s[1], tx: s[0], tz: s[1], rotY: team === 'blue' ? -Math.PI/2 : Math.PI/2,
-    maxHp: team === 'red' ? 130 : 100, hp: team === 'red' ? 130 : 100, alive: true, shootT: 1 + Math.random()*1.5, weapon: w, team: team, stuckT: 0, vx: 0, vz: 0, spd: 0, walkT: Math.random()*6, aim: 0, pitchS: 0, kick: 0, seed: Math.random()*6, diedAt: 0, yawS: team === 'blue' ? -Math.PI/2 : Math.PI/2, name: team === 'red' ? ALLY_NAMES[(i-2) % ALLY_NAMES.length] : null,
+    maxHp: team === 'red' ? 130 : 100, hp: team === 'red' ? 130 : 100, alive: true, shootT: 1 + Math.random()*1.5, weapon: w, team: team, stuckT: 0, vx: 0, vz: 0, spd: 0, walkT: Math.random()*6, aim: 0, pitchS: 0, kick: 0, seed: Math.random()*6, diedAt: 0, yawS: team === 'blue' ? -Math.PI/2 : Math.PI/2, name: team === P.team ? ALLY_NAMES[i % ALLY_NAMES.length] : null,
     model: BOT_MODELS[i % BOT_MODELS.length],
     hold: (w.type === 'sniper' ? 13 : w.type === 'shotgun' ? 4 : 6) + Math.random()*5
   });
@@ -1449,27 +1449,40 @@ for(let i=0; i<4; i++) spawnBot(i+2, 'red');  // союзники (за вас)
 function addBot(team){
   if(bots.length >= 24){ showMsg('Достигнут лимит ботов'); return; }
   spawnBot(bots.length, team);
-  showMsg(team === 'red' ? 'Союзник добавлен' : 'Противник добавлен');
+  showMsg(team === P.team ? 'Союзник добавлен' : 'Противник добавлен');
 }
 function removeBot(team){
   for(let i = bots.length - 1; i >= 0; i--){
-    if(bots[i].team === team){ bots.splice(i, 1); showMsg(team === 'red' ? 'Союзник убран' : 'Противник убран'); return; }
+    if(bots[i].team === team){
+      if(bots[i].tagEl) bots[i].tagEl.remove();
+      bots.splice(i, 1);
+      showMsg(team === P.team ? 'Союзник убран' : 'Противник убран');
+      return;
+    }
   }
 }
 const botPanel = document.getElementById('bot-panel');
+function renderBotPanel(){
+  if(!botPanel) return;
+  const a = P.team, en = a === 'red' ? 'blue' : 'red';
+  const ac = a === 'red' ? '🔴' : '🔵', ec = en === 'red' ? '🔴' : '🔵';
+  botPanel.innerHTML = `<button data-act="add-ally">+ ${ac} союзник</button><button data-act="del-ally">− ${ac} союзник</button><button data-act="add-enemy">+ ${ec} противник</button><button data-act="del-enemy">− ${ec} противник</button>`;
+}
+renderBotPanel();
 if(botPanel){
-  botPanel.innerHTML = '<button data-act="add-red">+ 🔴 союзник</button><button data-act="del-red">− 🔴 союзник</button><button data-act="add-blue">+ 🔵 противник</button><button data-act="del-blue">− 🔵 противник</button>';
   botPanel.addEventListener('click', (e) => {
     const act = e.target && e.target.dataset && e.target.dataset.act;
     if(!act) return;
     e.stopPropagation();
-    if(act === 'add-red') addBot('red');
-    else if(act === 'del-red') removeBot('red');
-    else if(act === 'add-blue') addBot('blue');
-    else if(act === 'del-blue') removeBot('blue');
+    const ally = P.team, enemy = P.team === 'red' ? 'blue' : 'red';
+    if(act === 'add-ally') addBot(ally);
+    else if(act === 'del-ally') removeBot(ally);
+    else if(act === 'add-enemy') addBot(enemy);
+    else if(act === 'del-enemy') removeBot(enemy);
   });
 }
 function updateBotPanel(){
+  renderBotPanel();
   if(botPanel) botPanel.classList.toggle('show', !netConnected || netIsHost);
 }
 function canManageBots(){
