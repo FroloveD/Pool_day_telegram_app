@@ -272,6 +272,7 @@ function showError(txt){
 }
 
 window.onerror = function(msg, url, line, col, err){
+  if(msg === 'Script error' && !line) return;
   let t = 'JS Error: ' + msg + '\nLine: ' + line + (col ? ':' + col : '');
   if(err && err.stack) t += '\n' + String(err.stack).split('\n').slice(0,4).join('\n');
   showError(t);
