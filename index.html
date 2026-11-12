@@ -446,7 +446,8 @@ function blotches(x, S, n, rmax, alpha, dark){
 function eachTile(S, step, cb){
   for(let py=0; py<S; py+=step) for(let px=0; px<S; px+=step) cb(px, py, step, step);
 }
-// Волокна дерева: волнистые горизонтальные штрихи чуть разной толщины и тона
+// Волокна дерева: волнистые горизонтальные штрихи чуть разной толщины и тона;
+// последний сегмент замыкается на стартовую высоту — бесшовный тайлинг по X
 function grain(x, S, n, alpha){
   for(let i=0; i<n; i++){
     const y = Math.random()*S;
@@ -454,7 +455,8 @@ function grain(x, S, n, alpha){
     x.lineWidth = 0.6+Math.random()*1.2;
     x.beginPath(); x.moveTo(0, y);
     let px = 0, py = y;
-    for(let sx = 32; sx <= S; sx += 32){ const ny = y+(Math.random()*8-4); x.quadraticCurveTo(px+16, py+(Math.random()*6-3), sx, ny); px = sx; py = ny; }
+    for(let sx = 32; sx < S; sx += 32){ const ny = y+(Math.random()*8-4); x.quadraticCurveTo(px+16, py+(Math.random()*6-3), sx, ny); px = sx; py = ny; }
+    x.quadraticCurveTo(px+16, py+(Math.random()*6-3), S, y);
     x.stroke();
   }
 }
@@ -587,6 +589,50 @@ function initBuffers(){
       });
     }, 512);
 
+    // ---------- Спрайты-текстуры оружия ----------
+    // Все рисуются в светлых тонах (около белого): шейдер умножает цвет детали на
+    // текстуру, поэтому базовый цвет сохраняется, а спрайт добавляет рисунок поверхности
+    // Брашированная сталь: волокна-штрихи вдоль оси ствола + царапины под углом + пятна
+    TEX.metal = makeTex((x, S) => {
+      x.fillStyle = '#e6e7e9'; x.fillRect(0, 0, S, S);
+      for(let i=0; i<300; i++){
+        const y = Math.random()*S, l = 20+Math.random()*120, sx = Math.random()*S, dark = Math.random() < 0.5;
+        x.strokeStyle = 'rgba('+(dark?'90,95,105':'255,255,255')+','+(0.05+Math.random()*0.1)+')';
+        x.lineWidth = 0.6+Math.random()*1.4;
+        x.beginPath(); x.moveTo(sx, y); x.lineTo(sx+l, y+(Math.random()*2-1)); x.stroke();
+      }
+      for(let i=0; i<25; i++){
+        const sx = Math.random()*S, sy = Math.random()*S, a = Math.random()*0.6-0.3, l = 8+Math.random()*30;
+        x.strokeStyle = 'rgba(70,75,85,'+(0.08+Math.random()*0.1)+')'; x.lineWidth = 0.7;
+        x.beginPath(); x.moveTo(sx, sy); x.lineTo(sx+Math.cos(a)*l, sy+Math.sin(a)*l); x.stroke();
+      }
+      blotches(x, S, 18, 40, 0.04, true);
+      noise(x, S, 1500, 0.04, true);
+    }, 256);
+    // Дерево приклада/цевья: волокна вдоль ствола + короткие тёмные поры + пятна лака
+    TEX.wood = makeTex((x, S) => {
+      x.fillStyle = '#ece4d8'; x.fillRect(0, 0, S, S);
+      grain(x, S, 140, 0.14);
+      for(let i=0; i<40; i++){
+        const sx = Math.random()*S, sy = Math.random()*S, l = 2+Math.random()*6;
+        x.strokeStyle = 'rgba(120,90,55,'+(0.1+Math.random()*0.12)+')'; x.lineWidth = 1;
+        x.beginPath(); x.moveTo(sx, sy); x.lineTo(sx+l, sy+(Math.random()*2-1)); x.stroke();
+      }
+      blotches(x, S, 14, 36, 0.05, true);
+      noise(x, S, 1200, 0.04, true);
+    }, 256);
+    // Полимер (пластик корпусов): мелкое зерно литья + едва заметные горизонтальные линии формы
+    TEX.poly = makeTex((x, S) => {
+      x.fillStyle = '#e3e4e6'; x.fillRect(0, 0, S, S);
+      noise(x, S, 5000, 0.05, true);
+      for(let i=0; i<20; i++){
+        const y = Math.random()*S;
+        x.strokeStyle = 'rgba(255,255,255,'+(0.03+Math.random()*0.04)+')'; x.lineWidth = 1+Math.random()*2;
+        x.beginPath(); x.moveTo(0, y); x.lineTo(S, y); x.stroke();
+      }
+      blotches(x, S, 12, 30, 0.03, true);
+    }, 256);
+
     function face(nx, ny, nz, verts){
       const uvq = [[0,0],[1,0],[1,1],[0,1]], out = [];
       verts.forEach((v,i) => out.push(v[0], v[1], v[2], nx, ny, nz, uvq[i][0], uvq[i][1]));
@@ -676,8 +722,17 @@ function drawParts(parts, parent){
     // материал детали: явный блеск в части (индекс 10) или по таблице цветов;
     // если ни то ни другое — матовый (0)
     gl.uniform1f(loc.shin, p[10] !== undefined ? p[10] : (SHIN.get(p[7].join(',')) || 0));
+    // спрайт-текстура детали: явная (индекс 11) или по цвету из PART_TEX.
+    // В шейдере base = col * tex.rgb — цвет сохраняется, спрайт даёт микрорельеф
+    // (браширование, волокна дерева, зерно литья пластика)
+    const tn = p[11] || PART_TEX.get(p[7].join(','));
+    if(tn && TEX[tn]){
+      gl.bindTexture(gl.TEXTURE_2D, TEX[tn]); gl.uniform1f(loc.useTex, 1); gl.uniform2f(loc.uvs, 1, 1);
+    } else gl.uniform1f(loc.useTex, 0);
     gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_SHORT, 0);
   }
+  // сбрасываем текстуру: следующие отрисовки (вспышки маркеры и т.п.) не должны наследовать спрайт
+  gl.uniform1f(loc.useTex, 0);
 }
 function drawBall(M, col){
   bindMesh(MESH.s);
@@ -697,6 +752,16 @@ const SHIN = new Map([
   [GC.silver.join(','), 0.9], [GC.glass.join(','), 1.0], [GC.blk.join(','), 0.22],
   [GC.wood.join(','), 0.12], [GC.dwood.join(','), 0.12], [GC.olive.join(','), 0.08],
   [GC.tan.join(','), 0.08], [GC.grn.join(','), 0.08]
+]);
+// Спрайты деталей оружия по цвету: сталь/никель/серебро/воронёная сталь — металл,
+// тёплые породы — дерево, чёрный/оливковый/хаки — полимер. Явная текстура в самой
+// части (индекс 11) имеет приоритет над таблицей. Цвета бойцов в таблице нет —
+// их форма остаётся чистой тканью без рисунка
+const PART_TEX = new Map([
+  [GC.gm.join(','), 'metal'], [GC.steel.join(','), 'metal'], [GC.nick.join(','), 'metal'],
+  [GC.silver.join(','), 'metal'], [GC.glass.join(','), 'metal'],
+  [GC.wood.join(','), 'wood'], [GC.dwood.join(','), 'wood'], [GC.tan.join(','), 'wood'],
+  [GC.blk.join(','), 'poly'], [GC.olive.join(','), 'poly'], [GC.grn.join(','), 'poly']
 ]);
 const cy=(x,y,z,d,l,c)=>['c',x,y,z,d,d,l,c,0];
 const rb=(x,y,z,a,b,l,c,t)=>['b',x,y,z,a,b,l,c,t||0];
