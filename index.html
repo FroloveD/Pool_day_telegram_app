@@ -19,6 +19,12 @@
   #cross i:nth-child(2){left:-1px;top:var(--g);width:2px;height:8px}
   #cross i:nth-child(3){top:-1px;left:calc(-1*var(--g) - 8px);height:2px;width:8px}
   #cross i:nth-child(4){top:-1px;left:var(--g);height:2px;width:8px}
+  #scope{position:absolute;inset:0;display:none;pointer-events:none}
+  #scope .vig{position:absolute;inset:0;background:radial-gradient(circle 32vh at 50% 50%, transparent 30.5vh, rgba(0,0,0,0.97) 32vh)}
+  #scope .ring{position:absolute;left:50%;top:50%;width:62vh;height:62vh;transform:translate(-50%,-50%);border:2px solid rgba(0,0,0,0.9);border-radius:50%}
+  #scope .lh{position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(10,10,10,0.9)}
+  #scope .lv{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(10,10,10,0.9)}
+  #scope .dot{position:absolute;left:50%;top:50%;width:4px;height:4px;transform:translate(-50%,-50%);border-radius:50%;background:rgba(10,10,10,0.9)}
   #stats{position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:20px;font-weight:700;text-shadow:0 1px 3px #000;background:rgba(0,0,0,.5);padding:4px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1)}
   #hp{position:absolute;left:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000}
   #wname{position:absolute;left:20px;bottom:58px;font-size:18px;font-weight:700;text-shadow:0 1px 3px #000;color:#ffd76e;pointer-events:auto;cursor:pointer}
@@ -131,6 +137,7 @@
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="cross"><i></i><i></i><i></i><i></i></div>
+  <div id="scope"><div class="lh"></div><div class="lv"></div><div class="ring"></div><div class="dot"></div><div class="vig"></div></div>
   <div id="dmg-indicator"><div id="dmg-arrow"></div></div>
   <div id="stats">Красные 0 : 0 Синие</div>
   <div id="hp">❤ 100</div>
@@ -1078,7 +1085,8 @@ function shoot(){
   const cpb = Math.cos(P.pitch), dbx = Math.sin(P.yaw)*cpb, dby = Math.sin(P.pitch), dbz = -Math.cos(P.yaw)*cpb;
   const distMul = 1 + Math.min(2.5, rayDist(P.x, oy, P.z, dbx, dby, dbz) / 18);
   const firstShot = spreadHeat <= 0 && !P.moving && !P.airborne;
-  const sp = firstShot ? 0 : w.spread * (zoomed ? 0.5 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.75 : 1.0) * (w.auto ? 1.0 : 0.85) * distMul;
+  const scopedAim = zoomed && w.zoom && !P.airborne;
+  const sp = (scopedAim || firstShot) ? 0 : w.spread * (zoomed ? 0.5 : 1.0) * (1 + spreadHeat * 3.5) * moveMul * (crouching && !P.airborne ? 0.75 : 1.0) * (w.auto ? 1.0 : 0.85) * distMul;
   const yawJ = (Math.random()*2-1)*sp, pitJ = (Math.random()*2-1)*sp*0.5;
   const yaw2 = P.yaw + yawJ, pit2 = Math.max(-1.55, Math.min(1.55, P.pitch + pitJ));
   const cp2 = Math.cos(pit2);
@@ -1665,6 +1673,7 @@ function groundHeight(x, z){
 const statsEl = document.getElementById('stats'), hpEl = document.getElementById('hp'), ammoEl = document.getElementById('ammo');
 const armorEqEl = document.getElementById('armor-equip');
 const crossEl = document.getElementById('cross');
+const scopeEl = document.getElementById('scope');
 let last = performance.now();
 
 function frame(now){
@@ -1894,6 +1903,9 @@ function update(dt, t){
   hpEl.style.color = P.armor === 2 ? '#7fc4ff' : P.armor && P.armorHp <= 0 ? '#888' : P.hp > 50 ? '#fff' : P.hp > 25 ? '#ffb347' : '#ff5555';
   
   const w = getActiveWeapon();
+  const scoped = !!(zoomed && w && w.zoom);
+  scopeEl.style.display = scoped ? 'block' : 'none';
+  crossEl.style.opacity = scoped ? 0 : 1;
   document.getElementById('wname').textContent = w ? w.name + ` [Слот ${activeSlot}]` : '';
   ammoEl.textContent = !w || w.type === 'knife' ? '' : reloading > 0 ? '⏳ Перезарядка…' : `🔫 ${ammo} / ∞`;
 }
