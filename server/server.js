@@ -45,7 +45,10 @@ const server = http.createServer(async (req, res) => {
     if (staticFile) {
       const fullPath = path.join(__dirname, staticFile);
       if (fs.existsSync(fullPath)) {
-        res.writeHead(200, { "content-type": staticFile.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8" });
+        res.writeHead(200, {
+          "content-type": staticFile.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8",
+          "cache-control": "no-cache, must-revalidate"
+        });
         return fs.createReadStream(fullPath).pipe(res);
       }
     }

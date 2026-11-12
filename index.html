@@ -143,7 +143,7 @@
 <body>
 <div id="rotate"><div class="ph"></div><p>Игра работает только в горизонтальной ориентации.<br>Поверните устройство набок.</p><button type="button" onclick="goLandscape(event)">⛶ Во весь экран · горизонтально</button></div>
 <div id="err"></div>
-<div id="rotate-hint"><div class="ico">📱</div>Поверните телефон горизонтально<br><span style="font-size:14px;opacity:.7">игра идёт только в альбомном режиме</span></div>
+<div id="rotate-hint" onclick="goLandscape(event)"><div class="ico">📱</div>Поверните телефон горизонтально<br><span style="font-size:14px;opacity:.7">игра идёт только в альбомном режиме · нажми, чтобы развернуть автоматически</span></div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="cross"><i></i><i></i><i></i><i></i></div>
@@ -254,11 +254,18 @@ window.addEventListener('touchstart', function forceOrientOnce(){
 
 function goLandscape(ev){
   if(ev) ev.stopPropagation();
+  const fail = () => {
+    if(!ev) return;
+    netStatus('⚠ Полный экран недоступен во встроенном браузере Telegram — открой игру в Chrome, либо просто поверни телефон');
+    const landBtn = document.getElementById('btn-land');
+    if(landBtn) landBtn.textContent = '⚠ Полный экран недоступен в Telegram — открой в Chrome';
+  };
   try {
     const el = document.documentElement;
     const req = el.requestFullscreen ? el.requestFullscreen() : (el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : null);
-    Promise.resolve(req).then(() => screen.orientation && screen.orientation.lock ? screen.orientation.lock('landscape') : null).catch(() => {});
-  } catch(e) {}
+    if(!req){ fail(); return; }
+    Promise.resolve(req).then(() => screen.orientation && screen.orientation.lock ? screen.orientation.lock('landscape') : null).catch(fail);
+  } catch(e) { fail(); }
 }
 window.addEventListener('orientationchange', () => setTimeout(() => window.dispatchEvent(new Event('resize')), 250));
 
