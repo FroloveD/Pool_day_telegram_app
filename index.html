@@ -1624,7 +1624,8 @@ function playerHit(dmg, attackerX, attackerZ){
 
   // Смерть: мгновенного респауна нет — держим P.hp=0 и включаем паузу 1.25с с
   // надписью «ПОТРАЧЕНО»; сам респаун выполняется в update() когда таймер истечёт
-  if(P.hp <= 0){
+  // deathPauseT <= 0 — страховка от повторного срабатывания смерти, пока игрок уже мёртв
+  if(P.hp <= 0 && deathPauseT <= 0){
     if(P.team==='red') scoreBots++; else scoreMe++;
     if(netConnected) netSend({type:'frag',team:P.team==='red'?'blue':'red'});
     P.hp = 0;
@@ -1741,7 +1742,8 @@ function netConnect(){
         // уже мёртв (идёт пауза) или под защитой респауна — урон не принимаем
         if(P.hp <= 0 || (P.spawnProt || 0) > 0) return;
         P.hp = Math.max(0, P.hp - applyPlayerDamage(m.amount||0)); beep('hurt'); dmgTimer=0.8;
-        if(P.hp <= 0){
+        // deathPauseT <= 0 — страховка от повторного срабатывания смерти, пока игрок уже мёртв
+        if(P.hp <= 0 && deathPauseT <= 0){
           netSend({type:'frag',team:m.attackerTeam});
           P.hp = 0; deathPauseT = 1.25; showWasted(); statDeaths++;
         }
@@ -2443,7 +2445,10 @@ function update(dt, t){
     const activeW = getActiveWeapon();
     if(mouseDown && activeW && activeW.auto && reloading <= 0) shoot();
     recoilOffset = Math.max(0, recoilOffset - dt*0.5);
-    P.hp = Math.min(100, P.hp + 1.5*dt);
+    // Пассивная регенерация HP. ВАЖНО: не работает, пока игрок мёртв (идёт пауза смерти) —
+    // иначе HP сразу становится > 0, ломает защиту "мёртвый не получает урон" (P.hp <= 0)
+    // и смерть срабатывает повторно, бесконечно сбрасывая таймер респауна
+    if(deathPauseT <= 0) P.hp = Math.min(100, P.hp + 1.5*dt);
 
     if((!netConnected || netIsHost) && !armorPickup.active && performance.now() >= armorPickup.respawnAt) armorPickup.active = true;
     const nearArmor = armorPickup.active && P.armor < 2 && Math.hypot(P.x - armorPickup.x, P.z - armorPickup.z) < 1.5 && P.y < -1.2;
