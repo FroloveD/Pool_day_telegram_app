@@ -63,6 +63,8 @@
   .wcat{width:100%;font-weight:800;font-size:15px;color:#7fd0ff;text-align:left;margin-top:8px;border-bottom:1px solid #3a5a78;padding-bottom:2px}
   .wbtn{pointer-events:auto;background:#1b2b3a;border:1px solid #3a5a78;color:#fff;border-radius:6px;padding:8px 12px;cursor:pointer;font-size:13px;min-width:190px;text-align:left;transition:all 0.15s}
   .wbtn:hover{background:#2b4a66;border-color:#7fd0ff;transform:translateY(-1px)}
+  .wbtn.last{border-color:#ffd76e;background:#2b2416}
+  .wbtn.last:hover{background:#3d331d;border-color:#ffe38a}
   .wbtn b{display:block;font-size:14px;color:#ffd76e}
   .wbtn span{opacity:.75;font-size:11px}
 
@@ -1105,6 +1107,11 @@ let crouchToggle = false, ctrlPending = false;
 let deathPauseT = 0; // пауза между смертью и респауном (1.25с), в это время показывается «ПОТРАЧЕНО»
 let statFrags = 0, statDeaths = 0;
 let buyingPhase = 1;
+// Последняя закупка (для кнопки «Купить как в прошлый раз»): имена оружия по слотам + уровень брони.
+// Хранится в localStorage, поэтому переживает перезагрузку страницы и работает и в одиночной, и в сетевой игре.
+let lastLoadout = null;
+try{ lastLoadout = JSON.parse(localStorage.getItem('fypd_last_loadout') || 'null'); }catch(e){ lastLoadout = null; }
+function saveLastLoadout(){ try{ localStorage.setItem('fypd_last_loadout', JSON.stringify(lastLoadout)); }catch(e){} }
 
 const GW_NAMES=['AK-47','M4A1','AWP','MP5 Navy','P90','Famas','Desert Eagle','Scout','XM1014','M249','Galil','USP45','UMP45','Glock-18'];
 let groundWeapons=[], _gi=0, gwSeq=0;
@@ -1968,6 +1975,15 @@ function buildMenuForPhase(){
   wgrid.innerHTML = '';
   wmenuTitle.textContent = buyingPhase === 1 ? 'Шаг 1: Основное оружие (Слот 1)' : buyingPhase === 2 ? 'Шаг 2: Пистолет (Слот 2)' : 'Шаг 3: Броня';
 
+  // Кнопка «Купить как в прошлый раз»: видна только на первом шаге и только если есть сохранённая закупка.
+  // Одним нажатием восстанавливает оба слота оружия и броню и сразу стартует раунд.
+  if(buyingPhase === 1 && lastLoadout && (lastLoadout.s1 || lastLoadout.s2)){
+    const rb = document.createElement('button'); rb.className = 'wbtn last'; rb.type = 'button';
+    rb.innerHTML = '<b>🔁 Купить как в прошлый раз</b><span>' + (lastLoadout.s1 || '—') + ' · ' + (lastLoadout.s2 || '—') + ' · ' + (lastLoadout.armor ? 'бронежилет' : 'без брони') + '</span>';
+    rb.addEventListener('click', (ev) => { ev.stopPropagation(); buyLastLoadout(); });
+    wgrid.appendChild(rb);
+  }
+
   WEAPONS.forEach(w => {
     if(w.slot !== buyingPhase) return;
     if(w.cat){
@@ -1980,6 +1996,9 @@ function buildMenuForPhase(){
     b.addEventListener('click', (ev) => {
       ev.stopPropagation();
       inventory[w.slot] = w;
+      // запоминаем выбор в последнюю закупку (слот 1 — основное, слот 2 — пистолет)
+      lastLoadout = Object.assign({}, lastLoadout || {}, w.slot === 1 ? {s1: w.name} : {s2: w.name});
+      saveLastLoadout();
       if(buyingPhase < 3){
         buyingPhase++;
         buildMenuForPhase();
@@ -1994,12 +2013,25 @@ function buildMenuForPhase(){
     const mkArmor = (label, lvl, sub) => {
       const b = document.createElement('button'); b.className = 'wbtn'; b.type = 'button';
       b.innerHTML = '<b>' + label + '</b><span>' + sub + '</span>';
-      b.addEventListener('click', (ev) => { ev.stopPropagation(); P.armor = lvl; P.armorHp = lvl ? 60 : 0; P.armorMax = lvl ? 60 : 0; beginRoundFromMenu(); });
+      b.addEventListener('click', (ev) => { ev.stopPropagation(); P.armor = lvl; P.armorHp = lvl ? 60 : 0; P.armorMax = lvl ? 60 : 0; lastLoadout = Object.assign({}, lastLoadout || {}, {armor: lvl}); saveLastLoadout(); beginRoundFromMenu(); });
       wgrid.appendChild(b);
     };
     mkArmor('🛡 Бронежилет', 1, 'урон ÷2 · скорость −35% · прочность 60');
     mkArmor('🚫 Без брони', 0, 'полная скорость');
   }
+}
+
+// Быстрая закупка «как в прошлый раз»: восстанавливает оружие из сохранённых имён (если оружие
+// переименовали/убрали — слот просто останется прежним), надевает сохранённую броню и стартует раунд
+function buyLastLoadout(){
+  if(!lastLoadout) return;
+  const w1 = WEAPONS.find(w => w.slot === 1 && w.name === lastLoadout.s1);
+  const w2 = WEAPONS.find(w => w.slot === 2 && w.name === lastLoadout.s2);
+  if(w1) inventory[1] = w1;
+  if(w2) inventory[2] = w2;
+  P.armor = lastLoadout.armor ? 1 : 0;
+  P.armorHp = P.armor ? 60 : 0; P.armorMax = P.armor ? 60 : 0;
+  beginRoundFromMenu();
 }
 
 function openBuyMenu(){
