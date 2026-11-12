@@ -1088,7 +1088,9 @@ const inventory = { 1: null, 2: null, 3: knifeWeapon };
 let activeSlot = 2;
 
 const pSpawn = baseSpawn(false);
-const P = { x:pSpawn[0], y:0.1, z:pSpawn[1], vy:0, yaw:Math.PI/2, pitch:0, hp:100, speed:8, team:'red', armor:0 };
+// speed 6 — базовая скорость бега (понижена с 8 на 25% для более тактического темпа);
+// дальше умножается на присед ×0.5, бассейн ×0.55, бронежилет ×0.65 и спринт ×1.4
+const P = { x:pSpawn[0], y:0.1, z:pSpawn[1], vy:0, yaw:Math.PI/2, pitch:0, hp:100, speed:6, team:'red', armor:0 };
 const keys = {};
 let ammo = 0, reloading = 0, fireCd = 0, zoomed = false;
 let scoreMe = 0, scoreBots = 0, msgT = 0, playing = false, roundActive = false;
@@ -1967,7 +1969,7 @@ function buildMenuForPhase(){
       b.addEventListener('click', (ev) => { ev.stopPropagation(); P.armor = lvl; P.armorHp = lvl ? 60 : 0; P.armorMax = lvl ? 60 : 0; beginRoundFromMenu(); });
       wgrid.appendChild(b);
     };
-    mkArmor('🛡 Бронежилет', 1, 'урон ÷2 · скорость −33% · прочность 60');
+    mkArmor('🛡 Бронежилет', 1, 'урон ÷2 · скорость −35% · прочность 60');
     mkArmor('🚫 Без брони', 0, 'полная скорость');
   }
 }
@@ -2173,7 +2175,8 @@ function update(dt, t){
     const inPool = !!(inAnyPool(P.x, P.z, 0) && P.y < -0.2);
     let isCrouching = keys['KeyC'] || crouchToggle;
     eyeOff += ((isCrouching ? 0.95 : 1.65) - eyeOff) * Math.min(1, dt * 10);
-    let currentSpeed = P.speed * (isCrouching ? 0.5 : 1.0) * (inPool ? 0.55 : 1.0) * (P.armor === 1 ? 0.67 : 1.0);
+    // итоговая скорость: базовая × присед 0.5 × бассейн 0.55 × бронежилет 0.65 (−35%)
+    let currentSpeed = P.speed * (isCrouching ? 0.5 : 1.0) * (inPool ? 0.55 : 1.0) * (P.armor === 1 ? 0.65 : 1.0);
 
     const cy = Math.cos(P.yaw), sy = Math.sin(P.yaw);
     let mx = 0, mz = 0, mag = 1;
