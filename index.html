@@ -273,6 +273,7 @@ function showError(txt){
 
 window.onerror = function(msg, url, line, col, err){
   if(msg === 'Script error' && !line) return;
+  if(/is not supported in version/.test(msg)) return;
   let t = 'JS Error: ' + msg + '\nLine: ' + line + (col ? ':' + col : '');
   if(err && err.stack) t += '\n' + String(err.stack).split('\n').slice(0,4).join('\n');
   showError(t);
@@ -280,6 +281,7 @@ window.onerror = function(msg, url, line, col, err){
 window.addEventListener('unhandledrejection', function(ev){
   const r = ev.reason;
   const t = (r && r.stack) ? String(r.stack).split('\n').slice(0,3).join('\n') : ((r && r.message) || String(r));
+  if(/is not supported in version/.test(t)) return;
   showError('Promise: ' + t);
 });
 window.addEventListener('error', function(ev){
@@ -1350,7 +1352,7 @@ function netConnect(){
         if(m.id === netId) return;
         let p = netPlayers.get(m.id);
         if(!p){
-          p = {netId:m.id, name:m.name || 'Игрок', team:m.team || 'blue', model:BOT_MODELS[0], weapon:WEAPONS.find(w=>w.name==='AK-47'), alive:true, hp:100,maxHp:100,y:0,vy:0,rotY:0,yawS:0,pitchS:0,aim:1,walkT:0,spd:0,vx:0,vz:0,kick:0,flash:0,diedAt:0,fr:0,de:0};
+          p = {netId:m.id, name:m.name || 'Игрок', team:m.team || 'blue', model:BOT_MODELS[0], weapon:WEAPONS.find(w=>w.name==='AK-47'), alive:true, hp:100,maxHp:100,y:0,vy:0,rotY:0,yawS:0,pitchS:0,aim:1,walkT:0,spd:0,vx:0,vz:0,kick:0,flash:0,diedAt:0,fr:0,de:0,seed:Math.random()*6};
           netPlayers.set(m.id,p);
         }
         Object.assign(p,{name:m.name||p.name,team:m.team||p.team,x:m.x||0,y:m.y||0,z:m.z||0,yaw:m.yaw||0,rotY:m.yaw||0,yawS:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
@@ -2172,7 +2174,7 @@ function drawBot(b, now){
 
   // голова: следит за целью, в покое осматривается
   const aim = dead ? 0 : (b.aim || 0), pitch = b.pitchS || 0;
-  const hy = dead ? 0 : Math.sin(now*0.0007 + b.seed)*0.5*(1 - aim);
+  const hy = dead ? 0 : Math.sin(now*0.0007 + (b.seed || 0))*0.5*(1 - aim);
   const Hf = mul(mul(mul(C, mT(0, 0.75*hh, 0)), mRy(hy)), mRx(-pitch*0.6));
   dm('s', mul(Hf, mul(mT(0, 0, 0.01), mS(0.19, 0.24, 0.22))), cSkin);
   [-1, 1].forEach(sd => dm('s', mul(Hf, mul(mT(sd*0.095, 0.01, 0.01), mS(0.03, 0.045, 0.035))), cSkin));
