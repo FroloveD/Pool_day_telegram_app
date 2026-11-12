@@ -87,6 +87,16 @@
   #roundover-board td{padding:3px 6px;border-bottom:1px solid #22344a}
   #roundover-board tr.me td{font-weight:800}
   #roundover-board .tred{color:#ff6b6b}#roundover-board .tblue{color:#6bb8ff}
+  /* Таблица счёта (Ё/~): полупрозрачная панель поверх игры, клики не перехватывает */
+  #scoreboard{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:7;display:none;flex-direction:column;background:rgba(5,12,22,.88);border:1px solid #3a5a78;border-radius:10px;padding:14px 18px;color:#fff;font-size:14px;pointer-events:none;min-width:340px;max-width:92vw;max-height:70vh;overflow:auto}
+  #scoreboard h2{margin:0 0 8px;font-size:16px;color:#ffd76e;letter-spacing:.06em}
+  #scoreboard table{width:100%;border-collapse:collapse}
+  #scoreboard th{font-size:11px;color:#8fa8bf;text-align:left;padding:3px 8px;border-bottom:1px solid #3a5a78}
+  #scoreboard td{padding:3px 8px;border-bottom:1px solid #22344a}
+  #scoreboard tr.me td{font-weight:800}
+  #scoreboard .tred{color:#ff6b6b}#scoreboard .tblue{color:#6bb8ff}
+  #scoreboard td:nth-child(2),#scoreboard td:nth-child(3),#scoreboard th:nth-child(2),#scoreboard th:nth-child(3){text-align:right}
+  #scoreboard .hint{margin-top:8px;font-size:11px;opacity:.6;text-align:center}
   #roundover-board td:nth-child(2),#roundover-board td:nth-child(3),#roundover-board th:nth-child(2),#roundover-board th:nth-child(3){text-align:right}
   #hitm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 4px #000;opacity:0;transition:opacity .15s;pointer-events:none}
   #bot-panel{position:fixed;right:12px;top:12px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto}
@@ -175,6 +185,8 @@
      зона обзора #touch-look (z-index:5) перехватывала касания по панели. Как прямой потомок
      body с z-index:6 панель снова выше мобильного управления -->
 <div id="bot-panel"></div>
+<!-- Таблица счёта: игроки + боты, фраги/смерти; открывается на Ё (~) -->
+<div id="scoreboard"><h2>ТАБЛИЦА СЧЁТА</h2><div id="scoreboard-rows"></div><div class="hint">Ё (~) — открыть/закрыть</div></div>
 
 <div id="mobile-controls">
   <div id="joystick-zone"><div id="joy-base"><div id="joystick-knob"></div></div></div>
@@ -1186,6 +1198,8 @@ window.addEventListener('keydown', e => {
   }
   if(e.code === 'KeyR') reload();
   if(e.code === 'KeyB' && roundActive) openBuyMenu();
+  // Ё (~) — таблица счёта (игроки + боты, фраги/смерти)
+  if(e.code === 'Backquote' && !e.repeat) toggleScoreboard();
   if(e.code === 'Digit1') switchSlot(1);
   if(e.code === 'Digit2') switchSlot(2);
   if(e.code === 'Digit3') switchSlot(3);
@@ -1582,6 +1596,7 @@ function shoot(){
 
 function killBot(b){
   b.alive = false; b.diedAt = performance.now();
+  b.deaths = (b.deaths || 0) + 1; // смерть бота идёт в таблицу счёта (Ё/~)
   if(b.weapon) groundWeapons.push({id:gwSeq++, x:b.x, z:b.z, rot:Math.random()*6.28, weapon:b.weapon});
   setTimeout(() => {
     const sp = getTeamSpawn(b.team === 'blue', b);
@@ -1620,7 +1635,7 @@ function applyPlayerDamage(dmg){
   return taken;
 }
 
-function playerHit(dmg, attackerX, attackerZ){
+function playerHit(dmg, attackerX, attackerZ, killer){
   // мёртвый (идёт пауза смерти) или защищённый после респауна урон не получает
   if(P.hp <= 0 || (P.spawnProt || 0) > 0) return;
   P.hp -= applyPlayerDamage(dmg);
@@ -1634,6 +1649,7 @@ function playerHit(dmg, attackerX, attackerZ){
   // deathPauseT <= 0 — страховка от повторного срабатывания смерти, пока игрок уже мёртв
   if(P.hp <= 0 && deathPauseT <= 0){
     if(P.team==='red') scoreBots++; else scoreMe++;
+    if(killer) killer.frags = (killer.frags || 0) + 1; // фраг боту, убившему игрока (таблица Ё/~)
     if(netConnected) netSend({type:'frag',team:P.team==='red'?'blue':'red'});
     P.hp = 0;
     deathPauseT = 1.25;
@@ -1751,7 +1767,8 @@ function netConnect(){
         P.hp = Math.max(0, P.hp - applyPlayerDamage(m.amount||0)); beep('hurt'); dmgTimer=0.8;
         // deathPauseT <= 0 — страховка от повторного срабатывания смерти, пока игрок уже мёртв
         if(P.hp <= 0 && deathPauseT <= 0){
-          netSend({type:'frag',team:m.attackerTeam});
+          // killerBot — индекс бота-убийцы: хост засчитает ему фраг, когда получит наш 'frag'
+          netSend({type:'frag',team:m.attackerTeam,killerBot:m.killerBot});
           P.hp = 0; deathPauseT = 1.25; showWasted(); statDeaths++;
         }
       } else if(m.type === 'armorTaken' && netIsHost){
@@ -1768,6 +1785,8 @@ function netConnect(){
       } else if(m.type === 'frag'){
         if(m.team==='red') scoreMe++; else if(m.team==='blue') scoreBots++;
         if(m.by && m.by === netId) statFrags++;
+        // фраг боту-убийце: считает только хост (у гостей боты придут синхронизацией botState)
+        if(netIsHost && typeof m.killerBot === 'number' && bots[m.killerBot]) bots[m.killerBot].frags = (bots[m.killerBot].frags || 0) + 1;
       } else if(m.type === 'notice') netStatus(m.text||'Серверное сообщение');
     });
     netSocket.addEventListener('close', () => {
@@ -1803,19 +1822,20 @@ function netPublish(now){
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0,spawnProt:+(b.spawnProt||0).toFixed(2)})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
+    netSend({type:'botState',bots:bots.map(b=>({x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0,spawnProt:+(b.spawnProt||0).toFixed(2),frags:+(b.frags||0),deaths:+(b.deaths||0)})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
   }
 }
 
 const bots = [];
 const ALLY_NAMES = ['Алекс','Макс','Дэн','Ник'];
+const ENEMY_NAMES = ['Гриша','Стас','Витя','Костя']; // имена вражеских ботов для таблицы счёта (на тегах врагов имена не показываются)
 const BOT_WEAPONS=['AK-47','M4A1','AWP','MP5 Navy','Famas','Galil','P90','XM1014','SG 552','Steyr AUG','UMP45','M249','Scout','MAC-10','M3 Super 90','Desert Eagle'].map(n=>WEAPONS.find(w=>w.name===n));
 function spawnBot(i, team){
   const s = getTeamSpawn(team === 'blue');
   const w = BOT_WEAPONS[Math.floor(Math.random()*BOT_WEAPONS.length)];
   bots.push({
     x: s[0], y: 0, z: s[1], tx: s[0], tz: s[1], rotY: team === 'blue' ? -Math.PI/2 : Math.PI/2,
-    maxHp: team === 'red' ? 130 : 100, hp: team === 'red' ? 130 : 100, alive: true, spawnProt: 0.75, shootT: 1 + Math.random()*1.5, weapon: w, team: team, stuckT: 0, vx: 0, vz: 0, spd: 0, walkT: Math.random()*6, aim: 0, pitchS: 0, kick: 0, seed: Math.random()*6, diedAt: 0, yawS: team === 'blue' ? -Math.PI/2 : Math.PI/2, name: team === P.team ? ALLY_NAMES[i % ALLY_NAMES.length] : null,
+    maxHp: team === 'red' ? 130 : 100, hp: team === 'red' ? 130 : 100, alive: true, spawnProt: 0.75, frags: 0, deaths: 0, shootT: 1 + Math.random()*1.5, weapon: w, team: team, stuckT: 0, vx: 0, vz: 0, spd: 0, walkT: Math.random()*6, aim: 0, pitchS: 0, kick: 0, seed: Math.random()*6, diedAt: 0, yawS: team === 'blue' ? -Math.PI/2 : Math.PI/2, name: team === P.team ? ALLY_NAMES[i % ALLY_NAMES.length] : ENEMY_NAMES[i % ENEMY_NAMES.length],
     model: BOT_MODELS[i % BOT_MODELS.length],
     hold: (w.type === 'sniper' ? 13 : w.type === 'shotgun' ? 4 : 6) + Math.random()*5
   });
@@ -1867,6 +1887,37 @@ function canManageBots(){
   if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
   return !netConnected || netIsHost;
 }
+
+// --- ТАБЛИЦА СЧЁТА (Ё/~): игроки + боты, фраги/смерти; обнуляется на старте новой серии раундов ---
+const scoreboardEl = document.getElementById('scoreboard');
+const scoreboardRowsEl = document.getElementById('scoreboard-rows');
+let scoreVisible = false;
+function toggleScoreboard(){
+  if(!scoreboardEl) return;
+  scoreVisible = !scoreVisible;
+  scoreboardEl.style.display = scoreVisible ? 'flex' : 'none';
+  if(scoreVisible) renderScoreboard();
+}
+function hideScoreboard(){
+  if(!scoreboardEl) return;
+  scoreVisible = false;
+  scoreboardEl.style.display = 'none';
+}
+function renderScoreboard(){
+  if(!scoreboardRowsEl) return;
+  // строки: сам игрок (frags = statFrags) + другие игроки (fr/de приходят в их 'player'-пакетах)
+  // + боты (frags/deaths считаются на хосте и синхронизируются через botState)
+  const rows = [{name: netName + ' (вы)', team: P.team, fr: statFrags, de: statDeaths, bot: false, me: true}];
+  netPlayers.forEach(p => rows.push({name: p.name, team: p.team, fr: p.fr || 0, de: p.de || 0, bot: false, me: false}));
+  bots.forEach(b => rows.push({name: b.name || 'Бот', team: b.team, fr: b.frags || 0, de: b.deaths || 0, bot: true, me: false}));
+  rows.sort((a, b) => b.fr - a.fr || a.de - b.de);
+  let h = '<table><tr><th>Игрок</th><th>Фраги</th><th>Смерти</th></tr>';
+  rows.forEach(r => {
+    h += `<tr${r.me ? ' class="me"' : ''}><td class="${r.team === 'red' ? 'tred' : 'tblue'}">${(r.bot ? '🤖 ' : '') + String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
+  });
+  scoreboardRowsEl.innerHTML = h + '</table>';
+}
+setInterval(() => { if(scoreVisible) renderScoreboard(); }, 500); // живое обновление, пока таблица открыта
 
 const DIFF_PRESETS = {
   easy:   { vision: 28, scan: 0.30, react: [0.85, 0.65], cadence: [0.70, 0.90], hitBase: 0.45, hitFall: 0.030, mem: 2.5, dmgMul: 0.60, spd: 3.9 },
@@ -1972,10 +2023,17 @@ function beginRoundFromMenu(){
   wmenuEl.style.display = 'none';
   roundActive = true;
   // при первом старте матча таймер раунда берётся из селектора меню (по умолчанию 5 мин)
-  if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = roundMinutes; statFrags = 0; statDeaths = 0; }
+  if(!matchLive){ matchLive = true; roundOver = false; roundWinner = null; scoreMe = 0; scoreBots = 0; roundTimeLeft = roundMinutes; statFrags = 0; statDeaths = 0;
+    // новая серия раундов — обнуляем статистику ботов (таблица Ё/~) и чужих игроков
+    // (свои statFrags/statDeaths обнулены выше; у гостей каждый клиент обнуляет их сам и синхронизирует)
+    bots.forEach(b => { b.frags = 0; b.deaths = 0; });
+    netPlayers.forEach(p => { p.fr = 0; p.de = 0; });
+  }
   // неуязвимость 0.75с активируется в момент фактического старта раунда: пока открыто меню покупки,
-  // таймер защиты не тратится (иначе защита истекла бы, пока игрок выбирает оружие)
+  // таймер защиты не тратится (иначе защита истекла бы, пока игрок выбирает оружие).
+  // То же для ботов — на хосте/в одиночной игре (гостям придёт через botState)
   P.spawnProt = 0.75;
+  if(!netConnected || netIsHost) bots.forEach(b => { if(b.alive) b.spawnProt = 0.75; });
   switchSlot(1);
   if(!isMobile){ try{ cv.requestPointerLock(); }catch(e){} }
 }
@@ -2069,6 +2127,7 @@ function endRoundByTime(){
   if(!isMobile && document.exitPointerLock){ try{ document.exitPointerLock(); }catch(e){} }
 }
 function showRoundOver(winner){
+  hideScoreboard(); // раунд закончен — прячем таблицу по Ё/~
   const el = document.getElementById('roundover');
   if(!el) return;
   const title = document.getElementById('roundover-title');
@@ -2414,11 +2473,11 @@ function update(dt, t){
           gunSound(b.weapon, Math.hypot(b.x-P.x, b.z-P.z));
           const bd = Math.max(6, Math.min(18, (b.weapon.dmg || 30)*0.28*D.dmgMul));
           if(Math.random() < Math.max(0.25, D.hitBase - pd*D.hitFall)){
-            if(T.ref === 'P') playerHit(bd*0.8, b.x, b.z);
-            else if(T.ref.netId) netSend({type:'damage',target:T.ref.netId,amount:bd*0.8,attackerTeam:b.team});
+            if(T.ref === 'P') playerHit(bd*0.8, b.x, b.z, b);
+            else if(T.ref.netId) netSend({type:'damage',target:T.ref.netId,amount:bd*0.8,attackerTeam:b.team,killerBot:bots.indexOf(b)});
             else if((T.ref.spawnProt||0) <= 0) { // бот-цель под защитой респауна — выстрел мимо
               T.ref.hp -= bd;
-              if(T.ref.hp <= 0 && T.ref.alive){ killBot(T.ref); if(b.team === 'blue') scoreBots++; else scoreMe++; if(netConnected) netSend({type:'frag',team:b.team}); }
+              if(T.ref.hp <= 0 && T.ref.alive){ killBot(T.ref); b.frags = (b.frags||0) + 1; if(b.team === 'blue') scoreBots++; else scoreMe++; if(netConnected) netSend({type:'frag',team:b.team}); }
             }
           }
         } else b.shootT = 0.3;
