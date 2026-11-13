@@ -5,6 +5,12 @@
 <meta name="screen-orientation" content="landscape">
 <meta name="x5-orientation" content="landscape">
 <meta name="mobile-web-app-capable" content="yes">
+<!-- Safari на iOS не поддерживает requestFullscreen: единственный способ «полного экрана» —
+     запуск с иконки домашнего экрана (standalone-режим PWA, без интерфейса Safari).
+     Эти теги включают такой режим и растягивают игру под прозрачный статус-бар -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="fy_pool_day">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>fy_pool_day — CS 1.6 Classic Arena</title>
 <script src="https://telegram.org/js/telegram-web-app.js" crossorigin="anonymous"></script>
@@ -94,6 +100,11 @@
   #scoreboard th{font-size:11px;color:#8fa8bf;text-align:left;padding:3px 8px;border-bottom:1px solid #3a5a78}
   #scoreboard td{padding:3px 8px;border-bottom:1px solid #22344a}
   #scoreboard tr.me td{font-weight:800}
+  /* Заголовки секций команд в таблицах (Ё/~ и итоги раунда): цвет = цвет команды,
+     в заголовке дублируется суммарный фраг команды */
+  #scoreboard th.team-h,#roundover-board th.team-h{font-size:12px;padding:6px 8px 4px;letter-spacing:.05em}
+  #scoreboard th.hred,#roundover-board th.hred{color:#ff7a6e}
+  #scoreboard th.hblue,#roundover-board th.hblue{color:#7ab8ff}
   /* люди — жирным, боты — приглушённым курсивом с пометкой 🤖: видно кто есть кто */
   #scoreboard .human{font-weight:800}
   #scoreboard .bot{opacity:.75;font-style:italic}
@@ -296,7 +307,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.20';
+const GAME_VERSION = 'v1.21';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -2294,15 +2305,20 @@ function renderScoreboard(){
   const rows = [{name: netName + ' (вы)', team: P.team, fr: statFrags, de: statDeaths, bot: false, me: true}];
   netPlayers.forEach(p => rows.push({name: p.name, team: p.team, fr: p.fr || 0, de: p.de || 0, bot: false, me: false}));
   bots.forEach(b => rows.push({name: b.name || 'Бот', team: b.team, fr: b.frags || 0, de: b.deaths || 0, bot: true, me: false}));
-  rows.sort((a, b) => b.fr - a.fr || a.de - b.de);
-  let h = '<table><tr><th>Игрок</th><th>Фраги</th><th>Смерти</th></tr>';
-  rows.forEach(r => {
-    // люди — жирным (класс human), боты — приглушённым курсивом с 🤖 (класс bot);
-    // своя строка дополнительно жирнее всей (tr.me)
-    const cls = (r.team === 'red' ? 'tred' : 'tblue') + ' ' + (r.bot ? 'bot' : 'human');
-    h += `<tr${r.me ? ' class="me"' : ''}><td class="${cls}">${(r.bot ? '🤖 ' : '') + String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
-  });
-  scoreboardRowsEl.innerHTML = h + '</table>';
+  // Разделение на команды: две секции (красные/синие), внутри каждой — сортировка по фрагам,
+  // в заголовке секции — суммарные фраги команды. Цвет имени больше не нужен per-row:
+  // команду показывает цвет заголовка секции, стили human/bot и tr.me сохранены
+  const section = (title, team) => {
+    const list = rows.filter(r => r.team === team).sort((a, b) => b.fr - a.fr || a.de - b.de);
+    if(!list.length) return '';
+    const total = list.reduce((s, r) => s + r.fr, 0);
+    let h = `<tr><th colspan="3" class="team-h ${team === 'red' ? 'hred' : 'hblue'}">${title} · ${total} фр.</th></tr>`;
+    list.forEach(r => {
+      h += `<tr${r.me ? ' class="me"' : ''}><td class="${r.bot ? 'bot' : 'human'}">${(r.bot ? '🤖 ' : '') + String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
+    });
+    return h;
+  };
+  scoreboardRowsEl.innerHTML = '<table>' + section('🔴 КРАСНЫЕ', 'red') + section('🔵 СИНИЕ', 'blue') + '</table>';
 }
 setInterval(() => { if(scoreVisible) renderScoreboard(); }, 500); // живое обновление, пока таблица открыта
 
@@ -2526,12 +2542,18 @@ function showRoundOver(winner){
   if(board){
     const rows = [{name: netName + ' (вы)', team: P.team, fr: statFrags, de: statDeaths, me: true}];
     netPlayers.forEach(p => rows.push({name: p.name, team: p.team, fr: p.fr || 0, de: p.de || 0, me: false}));
-    rows.sort((a, b) => b.fr - a.fr || a.de - b.de);
-    let h = '<table><tr><th>Игрок</th><th>Фраги</th><th>Смерти</th></tr>';
-    rows.forEach(r => {
-      h += `<tr${r.me ? ' class="me"' : ''}><td class="${r.team === 'red' ? 'tred' : 'tblue'}">${String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
-    });
-    board.innerHTML = h + '</table>';
+    // Итоги раунда тоже разбиты на команды — сразу видно, кто принёс победе вклад
+    const section = (title, team) => {
+      const list = rows.filter(r => r.team === team).sort((a, b) => b.fr - a.fr || a.de - b.de);
+      if(!list.length) return '';
+      const total = list.reduce((s, r) => s + r.fr, 0);
+      let h = `<tr><th colspan="3" class="team-h ${team === 'red' ? 'hred' : 'hblue'}">${title} · ${total} фр.</th></tr>`;
+      list.forEach(r => {
+        h += `<tr${r.me ? ' class="me"' : ''}><td>${String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
+      });
+      return h;
+    };
+    board.innerHTML = '<table>' + section('🔴 КРАСНЫЕ', 'red') + section('🔵 СИНИЕ', 'blue') + '</table>';
   }
   el.style.display = 'flex';
 }
