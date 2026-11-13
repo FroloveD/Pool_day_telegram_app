@@ -10,7 +10,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Проверки перед деплоем: синтаксис игрового скрипта (вынут из index.html) и сервера.
+      # Упавший чек не даст задеплоить сломанную версию
+      - name: Syntax check
+        run: |
+          python3 -c "
+          import re
+          html = open('index.html', encoding='utf-8').read()
+          scripts = re.findall(r'<script>(.*?)</script>', html, re.S)
+          assert scripts, 'no inline <script> found in index.html'
+          open('/tmp/game.js', 'w', encoding='utf-8').write('\n;\n'.join(scripts))
+          print(f'{len(scripts)} script block(s), ok')
+          "
+          node --check /tmp/game.js
+          node --check server/server.js
+
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only --wait-timeout 300
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # Проверка после деплоя: ждём, пока приложение поднимется, и требуем ok:true.
+      # Если сервер не поднялся — job падает, и это видно в Actions сразу
+      - name: Health check
+        run: |
+          for i in $(seq 1 12); do
+            sleep 5
+            if curl -fsS https://pool-day-telegram-app.fly.dev/health | grep -q '"ok":true'; then
+              echo "Health check OK"
+              curl -fsS https://pool-day-telegram-app.fly.dev/health
+              exit 0
+            fi
+            echo "attempt $i: not ready yet..."
+          done
+          echo "Health check FAILED after 60s"
+          exit 1

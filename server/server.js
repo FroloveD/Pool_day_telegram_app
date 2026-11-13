@@ -5,7 +5,9 @@ const fs = require("fs");
 const path = require("path");
 
 const PORT = Number(process.env.PORT || 8080);
-const MAX_ROOM_PLAYERS = Number(process.env.MAX_ROOM_PLAYERS || 12);
+const MAX_ROOM_PLAYERS = Number(process.env.MAX_ROOM_PLAYERS || 10); // лимит игроков на комнату
+const ROOM_EMPTY_TTL_MS = 10 * 60 * 1000; // пустая комната живёт не дольше 10 минут
+const VERSION = "1.14"; // версия билда; синхронизируется с GAME_VERSION в index.html
 const INTERNET_MODE = process.argv.includes("--internet");
 const rooms = new Map();
 
@@ -55,7 +57,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-    return res.end(JSON.stringify({ ok: true, service: "fy-pool-day-relay", rooms: rooms.size }));
+    return res.end(JSON.stringify({ ok: true, service: "fy-pool-day-relay", rooms: rooms.size, version: VERSION }));
   }
   res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
   res.end("fy_pool_day multiplayer relay is running\n");
@@ -102,9 +104,10 @@ wss.on("connection", (ws) => {
       const name = String(msg.room || "pool-day").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "pool-day";
       let room = rooms.get(name);
       if (!room) {
-        room = { name, peers: new Map(), hostId: null, botState: null };
+        room = { name, peers: new Map(), hostId: null, botState: null, lastActivity: Date.now() };
         rooms.set(name, room);
       }
+      room.lastActivity = Date.now();
       if (room.peers.size >= MAX_ROOM_PLAYERS) {
         send(ws, { type: "notice", text: `Комната заполнена (лимит ${MAX_ROOM_PLAYERS})` });
         return ws.close(1008, "Room full");
@@ -144,6 +147,7 @@ wss.on("connection", (ws) => {
     if (!room || !id) return;
     const peer = room.peers.get(id);
     if (!peer) return;
+    room.lastActivity = Date.now(); // любая активность продлевает жизнь комнаты
 
     if (msg.type === "player") {
       const p = peer.player;
@@ -162,14 +166,17 @@ wss.on("connection", (ws) => {
       if (room.hostId !== id || !Array.isArray(msg.bots)) return;
       room.botState = {
         type: "botState",
-        bots: msg.bots.slice(0, 32).map((b) => ({
+        // дельта-формат: null на месте неизменившихся ботов — пробрасываем как есть
+        bots: msg.bots.slice(0, 32).map((b) => b ? ({
           x: num(b.x), y: num(b.y), z: num(b.z), hp: num(b.hp),
           alive: !!b.alive, rotY: num(b.rotY), yawS: num(b.yawS),
           pitchS: num(b.pitchS), spd: num(b.spd), vx: num(b.vx), vz: num(b.vz),
           walkT: num(b.walkT), aim: num(b.aim), kick: num(b.kick), flash: num(b.flash),
           weapon: String(b.weapon || "").slice(0, 32), team: b.team === "red" ? "red" : "blue",
-          diedAt: num(b.diedAt)
-        })),
+          diedAt: num(b.diedAt), spawnProt: num(b.spawnProt),
+          frags: Math.max(0, Math.min(9999, Number(b.frags) | 0)),
+          deaths: Math.max(0, Math.min(9999, Number(b.deaths) | 0))
+        }) : null),
         score: { red: num(msg.score && msg.score.red), blue: num(msg.score && msg.score.blue) },
         timeLeft: Math.max(0, Math.min(3600, num(msg.timeLeft))),
         roundOver: !!msg.roundOver,
@@ -186,7 +193,8 @@ wss.on("connection", (ws) => {
           index: Math.max(0, Math.min(31, Number(msg.index) | 0)),
           amount: Math.max(0, Math.min(200, num(msg.amount))),
           attackerTeam: msg.attackerTeam === "blue" ? "blue" : "red",
-          attacker: String(msg.attacker || "").slice(0, 40)
+          attacker: String(msg.attacker || "").slice(0, 40),
+          w: String(msg.w || "").slice(0, 32) // оружие для ленты убийств
         });
       }
     } else if (msg.type === "damage") {
@@ -195,10 +203,20 @@ wss.on("connection", (ws) => {
       send(target.ws, {
         type: "damage", target: target.player.id,
         amount: Math.max(0, Math.min(200, num(msg.amount))),
-        attackerTeam: msg.attackerTeam === "blue" ? "blue" : "red"
+        attackerTeam: msg.attackerTeam === "blue" ? "blue" : "red",
+        killerBot: Number.isInteger(msg.killerBot) ? Math.max(0, Math.min(31, msg.killerBot)) : undefined,
+        kname: String(msg.kname || "").slice(0, 16) // имя бота-убийцы для ленты
       });
     } else if (msg.type === "frag") {
-      broadcast(room, { type: "frag", team: msg.team === "blue" ? "blue" : "red", by: String(msg.by || "").slice(0, 40) }, id);
+      broadcast(room, { type: "frag", team: msg.team === "blue" ? "blue" : "red", by: String(msg.by || "").slice(0, 40), killerBot: Number.isInteger(msg.killerBot) ? Math.max(0, Math.min(31, msg.killerBot)) : undefined }, id);
+    } else if (msg.type === "killfeed") {
+      // лента убийств: источник уже показал запись локально — остальным рассылаем очищенную копию
+      broadcast(room, {
+        type: "killfeed",
+        k: safeName(msg.k), kt: msg.kt === "blue" ? "blue" : "red", kb: !!msg.kb,
+        v: safeName(msg.v), vt: msg.vt === "blue" ? "blue" : "red", vb: !!msg.vb,
+        w: String(msg.w || "").slice(0, 32), hs: !!msg.hs
+      }, id);
     } else if (msg.type === "armorTaken") {
       if (room.hostId && room.hostId !== id) {
         const host = room.peers.get(room.hostId);
@@ -245,6 +263,7 @@ function verifyInitData(initData) {
   }
 }
 
+// Heartbeat: раз в 30с пингуем клиентов; кто не ответил — теряем (ws.terminate -> leave -> peerLeft)
 const heartbeat = setInterval(() => {
   for (const ws of wss.clients) {
     if (ws.isAlive === false) { ws.terminate(); continue; }
@@ -252,6 +271,18 @@ const heartbeat = setInterval(() => {
     ws.ping();
   }
 }, 30000);
+
+// Зачистка комнат: обычно пустая комната удаляется сразу при выходе последнего игрока (leave),
+// но на случай утечки раз в минуту удаляем комнаты без игроков, пустующие дольше 10 минут
+setInterval(() => {
+  const now = Date.now();
+  for (const [name, room] of rooms) {
+    if (!room.peers.size && now - (room.lastActivity || 0) > ROOM_EMPTY_TTL_MS) {
+      rooms.delete(name);
+      console.log(`Комната "${name}" закрыта: пуста более 10 минут`);
+    }
+  }
+}, 60000);
 
 let publicTunnel = null;
 server.listen(PORT, "0.0.0.0", async () => {

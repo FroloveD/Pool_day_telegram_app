@@ -99,16 +99,37 @@
   #scoreboard .hint{margin-top:8px;font-size:11px;opacity:.6;text-align:center}
   #roundover-board td:nth-child(2),#roundover-board td:nth-child(3),#roundover-board th:nth-child(2),#roundover-board th:nth-child(3){text-align:right}
   #hitm{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;font-weight:900;color:#fff;text-shadow:0 0 4px #000;opacity:0;transition:opacity .15s;pointer-events:none}
-  #bot-panel{position:fixed;right:12px;top:12px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto}
-  /* на мобильных опускаем панель ниже HUD (hp/патроны занимают верх экрана) */
-  .mob-visible #bot-panel{top:74px}
+  /* Панель ботов: свёрнута в кнопку-дропдаун в самом верхнем правом углу (свободное место),
+     список кнопок раскрывается вниз, чтобы не налегать на счётчик патронов */
+  #bot-panel{position:fixed;right:12px;top:6px;z-index:6;display:none;flex-direction:column;gap:5px;pointer-events:auto;align-items:flex-end}
+  #bot-panel.show{display:flex}
+  #bot-panel button{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;font-size:14px;font-weight:700;padding:4px 10px;cursor:pointer;touch-action:manipulation}
+  #bot-panel button:hover{background:rgba(60,120,180,.6)}
+  #bot-menu{display:none;flex-direction:column;gap:5px;align-items:flex-end}
+  #bot-panel.open #bot-menu{display:flex}
+  /* на мобильных при открытой панели ботов патроны уезжают вниз, чтобы не пересекаться */
+  .mob-visible.bot-ui #ammo{top:46px}
+  /* Лента убийств: под панелью ботов, справа; записи гаснут через 5с */
+  #killfeed{position:fixed;right:12px;top:44px;z-index:6;display:flex;flex-direction:column;gap:3px;align-items:flex-end;pointer-events:none}
+  .killfeed-item{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:2px 8px;font-size:13px;color:#ddd;white-space:nowrap;transition:opacity .8s}
+  .killfeed-item.fade{opacity:0}
+  .killfeed-item .kred{color:#ff6b6b}.killfeed-item .kblue{color:#6bb8ff}
+  .killfeed-item .human{font-weight:800} /* люди в ленте — жирным, боты — обычным */
+  .killfeed-item .wpn{opacity:.65;font-size:11px;margin:0 4px}
+  .mob-visible #killfeed{top:86px}
+  /* Настройки звука/чувствительности в стартовом меню */
+  #settings-panel{width:min(92vw,520px);box-sizing:border-box;padding:12px;background:rgba(20,38,55,.92);border:1px solid #3d6684;border-radius:10px;text-align:left}
+  .set-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:13px}
+  .set-row span{flex:0 0 150px}
+  .set-row input[type=range]{flex:1}
   #bot-panel.show{display:flex}
   #bot-panel button{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;font-size:14px;font-weight:700;padding:4px 10px;cursor:pointer;touch-action:manipulation}
   #bot-panel button:hover{background:rgba(60,120,180,.6)}
   #dmg-indicator{position:absolute;left:50%;top:50%;width:180px;height:180px;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity 0.1s linear}
   /* Оверлей смерти «ПОТРАЧЕНО»: затемнение + крупная надпись; появление мгновенное,
      исчезновение — плавное за 1с (transition включается JS-ом только на фейд) */
-  #wasted{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:60;pointer-events:none;background:radial-gradient(ellipse at center, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0.6));opacity:1}
+  /* Оверлей смерти полупрозрачный: под ним видно спектатор-камеру, облетающую место смерти */
+  #wasted{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:60;pointer-events:none;background:radial-gradient(ellipse at center, rgba(0,0,0,0.05) 40%, rgba(0,0,0,0.3));opacity:1}
   #wasted span{font-size:min(13vw,110px);font-weight:900;letter-spacing:.14em;color:#a8232c;text-shadow:0 0 22px rgba(0,0,0,.95),0 4px 8px #000;-webkit-text-stroke:2px #1a0000}
   #dmg-arrow{width:100%;height:100%;background:radial-gradient(circle, transparent 55%, rgba(255, 30, 30, 0.75) 75%, transparent 76%);clip-path:polygon(30% 0%, 70% 0%, 50% 25%)}
 
@@ -187,6 +208,8 @@
 <div id="bot-panel"></div>
 <!-- Таблица счёта: игроки + боты, фраги/смерти; открывается на Ё (~) -->
 <div id="scoreboard"><h2>ТАБЛИЦА СЧЁТА</h2><div id="scoreboard-rows"></div><div class="hint">Ё (~) — открыть/закрыть</div></div>
+<!-- Лента убийств: кто кого и чем; записи живут 5с -->
+<div id="killfeed"></div>
 
 <div id="mobile-controls">
   <div id="joystick-zone"><div id="joy-base"><div id="joystick-knob"></div></div></div>
@@ -201,7 +224,7 @@
 </div>
 
 <div id="start" class="overlay">
-  <h1>fy_pool_day — CS 1.6 Arena</h1>
+  <h1>fy_pool_day — CS 1.6 Arena <span id="game-version" style="font-size:12px;color:#7fd0ff;vertical-align:middle"></span></h1>
   <p id="controls-desc">Загрузка управления...</p>
   <section id="net-panel">
     <div class="net-title">СЕТЕВАЯ ИГРА · TELEGRAM MINI APP</div>
@@ -230,6 +253,13 @@
     <option value="900">⏱ Раунд: 15 минут</option>
   </select></div>
   <div id="bot-custom-panel" style="display:none;width:100%;max-width:430px;margin:0 auto;flex-direction:column;gap:6px;font-size:12px;text-align:left;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:10px 14px"></div>
+  <section id="settings-panel">
+    <div class="net-title">НАСТРОЙКИ · ЗВУК И ЧУВСТВИТЕЛЬНОСТЬ</div>
+    <div class="set-row"><span>🔊 Эффекты (выстрелы)</span><input type="range" data-set="fx" min="0" max="1" step="0.05"></div>
+    <div class="set-row"><span>👣 Шаги и прыжки</span><input type="range" data-set="step" min="0" max="1" step="0.05"></div>
+    <div class="set-row"><span>🎵 Фоновая музыка</span><input type="range" data-set="music" min="0" max="1" step="0.05"></div>
+    <div class="set-row"><span>🖱 Чувствительность мыши</span><input type="range" data-set="sens" min="0.3" max="2.5" step="0.1"></div>
+  </section>
   <button type="button" onclick="startBuyingProcess(event)">Играть →</button>
   <button type="button" id="btn-controls-mode" style="background:#34506b" onclick="toggleControlsMode(event)"></button>
   <button type="button" id="btn-land" style="display:none;background:#34506b" onclick="goLandscape(event)">⛶ Полный экран · горизонтально</button>
@@ -254,6 +284,11 @@
 </div>
 
 <script>
+// Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
+// Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
+const GAME_VERSION = 'v1.14';
+try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
+console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
 let isMobile = (isTouchDevice || window.innerWidth < 800) && !(typeof matchMedia === 'function' && matchMedia('(pointer:fine)').matches && matchMedia('(hover:hover)').matches);
 try { const savedMode = localStorage.getItem('controls-mode'); if (savedMode) isMobile = savedMode === 'touch'; } catch (e) {}
@@ -342,8 +377,11 @@ function initGL(){
     if(!gl){ showError('WebGL не поддерживается'); return false; }
 
     function resize(){
-      cv.width = window.innerWidth * devicePixelRatio;
-      cv.height = window.innerHeight * devicePixelRatio;
+      // Кап плотности пикселей: на телефонах DPR бывает 3+ — рендер в полном разрешении
+      // сильно бьёт по FPS. Мобильным ограничиваем 1.5x, десктопу 2x — картинка всё ещё чёткая
+      const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
+      cv.width = window.innerWidth * dpr;
+      cv.height = window.innerHeight * dpr;
       gl.viewport(0, 0, cv.width, cv.height);
     }
     window.addEventListener('resize', resize);
@@ -1228,18 +1266,64 @@ window.addEventListener('keyup', e => {
 window.addEventListener('wheel', e => { if(playing && e.ctrlKey) e.preventDefault(); }, {passive:false});
 
 let AC = null;
+// --- Громкость по категориям: эффекты / шаги / музыка. Регулируется слайдерами в стартовом меню,
+// --- хранится в localStorage. Все звуки подключаются к своему GainNode вместо выхода напрямую
+let gFx = null, gStep = null, gMusic = null, ambientOn = false;
 function ensureAudio(){
-  if(!AC){ try{ AC = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+  if(AC) return;
+  try{
+    AC = new (window.AudioContext||window.webkitAudioContext)();
+    gFx = AC.createGain(); gFx.connect(AC.destination);
+    gStep = AC.createGain(); gStep.connect(AC.destination);
+    gMusic = AC.createGain(); gMusic.connect(AC.destination);
+    applyVolumes();
+    startAmbient();
+  }catch(e){ AC = null; }
 }
+// Настройки (громкости + чувствительность мыши), сохранение в localStorage между сессиями
+let settings = { fx: 0.9, step: 0.8, music: 0.35, sens: 1 };
+try{ Object.assign(settings, JSON.parse(localStorage.getItem('fypd_settings') || '{}')); }catch(e){}
+function saveSettings(){ try{ localStorage.setItem('fypd_settings', JSON.stringify(settings)); }catch(e){} }
+function applyVolumes(){
+  if(!AC) return;
+  gFx.gain.value = settings.fx;
+  gStep.gain.value = settings.step;
+  gMusic.gain.value = settings.music;
+}
+// Фоновая музыка: тихий «подводный» пад из трёх расстроенных синусов с медленным дыханием
+// громкости (LFO). Играется через gMusic — слайдер «Музыка» управляет им отдельно
+function startAmbient(){
+  if(!AC || ambientOn) return;
+  ambientOn = true;
+  [[55, 0.5],[82.4, 0.3],[110, 0.22]].forEach(([f, v]) => {
+    const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+    const g = AC.createGain(); g.gain.value = v * 0.5;
+    const lfo = AC.createOscillator(); lfo.frequency.value = 0.06 + Math.random()*0.05;
+    const lg = AC.createGain(); lg.gain.value = v * 0.25;
+    lfo.connect(lg); lg.connect(g.gain);
+    o.connect(g); g.connect(gMusic);
+    o.start(); lfo.start();
+  });
+}
+// Привязка слайдеров настроек в стартовом меню
+(function bindSettings(){
+  document.querySelectorAll('#settings-panel input[data-set]').forEach(inp => {
+    const k = inp.dataset.set;
+    inp.value = settings[k];
+    inp.addEventListener('input', () => { settings[k] = parseFloat(inp.value); saveSettings(); applyVolumes(); });
+  });
+})();
 function beep(type){
   if(!AC) return;
+  // шаги/прыжки идут в канал «Шаги», остальные — в «Эффекты»
+  const dest = (type === 'step' || type === 'jump' || type === 'land') ? gStep : gFx;
   const o = AC.createOscillator(), g = AC.createGain();
   o.type = type === 'shot' ? 'square' : (type === 'hit' || type === 'head') ? 'sine' : (type === 'step' || type === 'jump' || type === 'land') ? 'triangle' : 'sawtooth';
   o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'head' ? 1250 : type === 'hit' ? 800 : type === 'step' ? 85 + Math.random()*35 : type === 'jump' ? 220 : type === 'land' ? 60 : 100;
   const dur = type === 'shot' ? 0.07 : type === 'head' ? 0.18 : type === 'step' ? 0.05 : type === 'jump' ? 0.08 : type === 'land' ? 0.1 : 0.12;
   g.gain.setValueAtTime(type === 'shot' ? 0.08 : type === 'step' ? 0.03 : type === 'jump' ? 0.04 : type === 'land' ? 0.06 : 0.1, AC.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
-  o.connect(g).connect(AC.destination);
+  o.connect(g).connect(dest);
   o.start(); o.stop(AC.currentTime + dur + 0.04);
 }
 
@@ -1259,7 +1343,7 @@ function getNoiseBuf(){
 }
 // Шумовой слой: buffering=0.5с хватает с запасом; фильтр f0→f1 задаёт «спад»
 // хвоста (у снайперок хвост низкий и длинный, у ПП — короткий и высокий)
-function playNoise(t, dur, vol, ftype, f0, f1, q){
+function playNoise(t, dur, vol, ftype, f0, f1, q, dest){
   if(vol <= 0.001) return;
   const src = AC.createBufferSource(); src.buffer = getNoiseBuf(); src.loop = true;
   const f = AC.createBiquadFilter(); f.type = ftype; f.Q.value = q || 0.8;
@@ -1268,12 +1352,12 @@ function playNoise(t, dur, vol, ftype, f0, f1, q){
   const g = AC.createGain();
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.001, t+dur);
-  src.connect(f); f.connect(g); g.connect(AC.destination);
+  src.connect(f); f.connect(g); g.connect(dest || gFx || AC.destination);
   src.start(t); src.stop(t+dur+0.05);
 }
 // Низкочастотный слой: синус f0→f1 (например 80→28 Гц у AWP) даёт «давящий»
 // бас; без него выстрел звучит как хлопок петарды
-function playThump(t, f0, f1, dur, vol){
+function playThump(t, f0, f1, dur, vol, dest){
   if(vol <= 0.001) return;
   const o = AC.createOscillator(), g = AC.createGain();
   o.type = 'sine';
@@ -1281,7 +1365,7 @@ function playThump(t, f0, f1, dur, vol){
   o.frequency.exponentialRampToValueAtTime(Math.max(22, f1), t+dur);
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.001, t+dur);
-  o.connect(g); g.connect(AC.destination);
+  o.connect(g); g.connect(dest || gFx || AC.destination);
   o.start(t); o.stop(t+dur+0.05);
 }
 // Механический щелчок (сухой спуск, детали перезарядки); when — задержка в сек
@@ -1492,13 +1576,14 @@ function shoot(){
     if(hitBot){
       const dealt = Math.min(w.dmg, hitBot.hp), dead = hitBot.hp - w.dmg <= 0;
       popDamage(hitBot.x, hitBot.y + 1.9, hitBot.z, dealt, dead); hitMarker(dead); beep('hit');
-      if(netConnected && !netIsHost) netSend({type:'botHit',index:bots.indexOf(hitBot),amount:w.dmg,attackerTeam:P.team,attacker:netId});
+      if(netConnected && !netIsHost) netSend({type:'botHit',index:bots.indexOf(hitBot),amount:w.dmg,attackerTeam:P.team,attacker:netId,w:'🔪'});
       else {
         hitBot.hp -= w.dmg;
         if(hitBot.hp <= 0){
           killBot(hitBot); if(P.team==='red') scoreMe++; else scoreBots++;
           statFrags++;
           if(netConnected) netSend({type:'frag',team:P.team,by:netId});
+          addKillFeed(netName, P.team, false, hitBot.name, hitBot.team, true, '🔪', false); netKillFeed(netName, P.team, false, hitBot.name, hitBot.team, true, '🔪', false);
           showMsg('Фраг ножом! +1');
         }
       }
@@ -1573,13 +1658,14 @@ function shoot(){
     const dealt = Math.min(dmg, hitBot.hp), dead = hitBot.hp - dmg <= 0;
     popDamage(ip[0], ip[1] + 0.15, ip[2], dealt, dead, hs); hitMarker(dead); beep(hs ? 'head' : 'hit');
     if(netConnected && !netIsHost){
-      netSend({type:'botHit',index:bots.indexOf(hitBot),amount:dmg,attackerTeam:P.team,attacker:netId});
+      netSend({type:'botHit',index:bots.indexOf(hitBot),amount:dmg,attackerTeam:P.team,attacker:netId,w:w.name});
     } else {
       hitBot.hp -= dmg;
       if(hitBot.hp <= 0){
         killBot(hitBot); if(P.team==='red') scoreMe++; else scoreBots++;
         statFrags++;
         netSend({type:'frag',team:P.team,by:netId});
+        addKillFeed(netName, P.team, false, hitBot.name, hitBot.team, true, w.name, hs); netKillFeed(netName, P.team, false, hitBot.name, hitBot.team, true, w.name, hs);
         showMsg(hs ? '💥 HEADSHOT! +1 (' + w.name + ')' : 'Фраг! +1 (' + w.name + ')');
       }
     }
@@ -1650,9 +1736,10 @@ function playerHit(dmg, attackerX, attackerZ, killer){
   if(P.hp <= 0 && deathPauseT <= 0){
     if(P.team==='red') scoreBots++; else scoreMe++;
     if(killer) killer.frags = (killer.frags || 0) + 1; // фраг боту, убившему игрока (таблица Ё/~)
+    if(killer) { addKillFeed(killer.name, killer.team, true, netName, P.team, false, killer.weapon && killer.weapon.name, false); netKillFeed(killer.name, killer.team, true, netName, P.team, false, killer.weapon && killer.weapon.name, false); }
     if(netConnected) netSend({type:'frag',team:P.team==='red'?'blue':'red'});
     P.hp = 0;
-    deathPauseT = 1.25;
+    deathPauseT = 2; // пауза смерти 2с — за это время камера облетает место смерти (спектатор)
     showWasted();
     statDeaths++;
   }
@@ -1745,7 +1832,9 @@ function netConnect(){
         netStatus(netIsHost ? 'Вы стали хостом матча.' : 'Хост матча изменился.');
         updateBotPanel();
       } else if(m.type === 'botState' && !netIsHost){
+        // дельта-формат: на месте неизменившихся ботов — null, пропускаем их
         (m.bots||[]).forEach((v,i)=>{
+          if(!v) return;
           let b=bots[i]; if(!b){ spawnBot(i, v.team||'blue'); b=bots[bots.length-1]; }
           b.nx=v.x; b.ny=v.y; b.nz=v.z; b.nrotY=v.rotY; b.nyawS=v.yawS===undefined?v.rotY:v.yawS;
           // у гостя вспышка бота приходит из botState: переход «не стрелял → стреляет» = звук
@@ -1769,7 +1858,9 @@ function netConnect(){
         if(P.hp <= 0 && deathPauseT <= 0){
           // killerBot — индекс бота-убийцы: хост засчитает ему фраг, когда получит наш 'frag'
           netSend({type:'frag',team:m.attackerTeam,killerBot:m.killerBot});
-          P.hp = 0; deathPauseT = 1.25; showWasted(); statDeaths++;
+          // лента: нас убил чужой игрок (имя приходит в damage-пакете) или бот другой комнаты
+          if(m.kname){ addKillFeed(m.kname, m.attackerTeam, false, netName, P.team, false, m.kw || '', false); netKillFeed(m.kname, m.attackerTeam, false, netName, P.team, false, m.kw || '', false); }
+          P.hp = 0; deathPauseT = 2; showWasted(); statDeaths++;
         }
       } else if(m.type === 'armorTaken' && netIsHost){
         armorPickup.active = false; armorPickup.respawnAt = performance.now() + ARMOR_RESPAWN_MS;
@@ -1780,13 +1871,21 @@ function netConnect(){
         const b=bots[m.index];
         if(b && b.alive && (b.spawnProt||0) <= 0){
           b.hp -= m.amount||0;
-          if(b.hp <= 0){ killBot(b); if(m.attackerTeam==='red') scoreMe++; else scoreBots++; netSend({type:'frag',team:m.attackerTeam,by:m.attacker}); }
+          if(b.hp <= 0){
+            killBot(b); if(m.attackerTeam==='red') scoreMe++; else scoreBots++; netSend({type:'frag',team:m.attackerTeam,by:m.attacker});
+            // лента: чужой игрок убил бота (имя атакующего ищем среди подключённых)
+            const kn = (netPlayers.get(m.attacker) && netPlayers.get(m.attacker).name) || 'Игрок';
+            addKillFeed(kn, m.attackerTeam, false, b.name, b.team, true, m.w || '', false); netKillFeed(kn, m.attackerTeam, false, b.name, b.team, true, m.w || '', false);
+          }
         }
       } else if(m.type === 'frag'){
         if(m.team==='red') scoreMe++; else if(m.team==='blue') scoreBots++;
         if(m.by && m.by === netId) statFrags++;
         // фраг боту-убийце: считает только хост (у гостей боты придут синхронизацией botState)
         if(netIsHost && typeof m.killerBot === 'number' && bots[m.killerBot]) bots[m.killerBot].frags = (bots[m.killerBot].frags || 0) + 1;
+      } else if(m.type === 'killfeed'){
+        // чужая запись ленты убийств — просто показываем (не пересылаем дальше)
+        addKillFeed(m.k, m.kt, !!m.kb, m.v, m.vt, !!m.vb, m.w, !!m.hs);
       } else if(m.type === 'notice') netStatus(m.text||'Серверное сообщение');
     });
     netSocket.addEventListener('close', () => {
@@ -1822,9 +1921,28 @@ function netPublish(now){
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
-    netSend({type:'botState',bots:bots.map(b=>({x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0,spawnProt:+(b.spawnProt||0).toFixed(2),frags:+(b.frags||0),deaths:+(b.deaths||0)})),score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))});
+    // ДЕЛЬТА-СИНХРОНИЗАЦИЯ ботов: каждые 100мс сравниваем компактный снимок каждого бота
+    // с последним отправленным; неизменившиеся боты уходят как null (1 байт), изменившиеся — целиком.
+    // При 24 ботах это режет трафик в разы: обычно двигаются единицы.
+    if(botSnap.length !== bots.length) botSnap = []; // состав ботов менялся — сброс, один полный пакет
+    let changed = 0;
+    const arr = bots.map((b,i) => {
+      const cur = {x:+b.x.toFixed(2),y:+b.y.toFixed(2),z:+b.z.toFixed(2),hp:Math.round(b.hp),alive:b.alive,rotY:+b.rotY.toFixed(3),yawS:+(b.yawS===undefined?b.rotY:b.yawS).toFixed(3),pitchS:+(b.pitchS||0).toFixed(2),spd:+(b.spd||0).toFixed(2),vx:+(b.vx||0).toFixed(2),vz:+(b.vz||0).toFixed(2),walkT:+(b.walkT||0).toFixed(2),aim:+(b.aim||0).toFixed(2),kick:+(b.kick||0).toFixed(2),flash:+(b.flash||0).toFixed(2),weapon:b.weapon&&b.weapon.name,team:b.team,diedAt:b.diedAt||0,spawnProt:+(b.spawnProt||0).toFixed(2),frags:+(b.frags||0),deaths:+(b.deaths||0)};
+      const s = JSON.stringify(cur);
+      if(botSnap[i] === s) return null; // не изменился — не шлём
+      botSnap[i] = s; changed++;
+      return cur;
+    });
+    // метаданные (счёт/таймер/броня/оружие на земле) шлём при любом изменении или при изменении ботов
+    const meta = {score:{red:scoreMe,blue:scoreBots},timeLeft:Math.max(0,Math.ceil(roundTimeLeft)),roundOver:roundOver,winner:roundWinner||'draw',armor:{active:armorPickup.active,respawnAt:armorPickup.respawnAt},gw:groundWeapons.map(g=>({i:g.id,x:+g.x.toFixed(2),y:(g.y===undefined?null:+g.y.toFixed(2)),z:+g.z.toFixed(2),r:+(g.rot||0).toFixed(2),w:g.weapon.name}))};
+    const ms = JSON.stringify(meta);
+    const metaChanged = botMetaSnap !== ms;
+    if(!changed && !metaChanged) return; // нечего слать — экономим трафик целиком
+    botMetaSnap = ms;
+    netSend(Object.assign({type:'botState',bots:arr}, meta));
   }
 }
+let botSnap = [], botMetaSnap = ''; // кеши последних отправленных снимков ботов и метаданных
 
 const bots = [];
 const ALLY_NAMES = ['Алекс','Макс','Дэн','Ник'];
@@ -1863,7 +1981,13 @@ function renderBotPanel(){
   if(!botPanel) return;
   const a = P.team, en = a === 'red' ? 'blue' : 'red';
   const ac = a === 'red' ? '🔴' : '🔵', ec = en === 'red' ? '🔴' : '🔵';
-  botPanel.innerHTML = `<button data-act="add-ally">+ ${ac} союзник</button><button data-act="del-ally">− ${ac} союзник</button><button data-act="add-enemy">+ ${ec} противник</button><button data-act="del-enemy">− ${ec} противник</button>`;
+  // свёрнутый вид: одна кнопка-дропдаун в самом углу (не налегает на патроны);
+  // список действий раскрывается вниз по нажатию
+  botPanel.innerHTML = '<button type="button" id="bot-toggle">🤖 Боты ▾</button><div id="bot-menu">'
+    + `<button data-act="add-ally">+ ${ac} союзник</button><button data-act="del-ally">− ${ac} союзник</button>`
+    + `<button data-act="add-enemy">+ ${ec} противник</button><button data-act="del-enemy">− ${ec} противник</button></div>`;
+  const tg = document.getElementById('bot-toggle');
+  if(tg) tg.addEventListener('click', (e) => { e.stopPropagation(); botPanel.classList.toggle('open'); });
 }
 renderBotPanel();
 if(botPanel){
@@ -1880,12 +2004,43 @@ if(botPanel){
 }
 function updateBotPanel(){
   renderBotPanel();
-  if(botPanel) botPanel.classList.toggle('show', !netConnected || netIsHost);
+  const show = !netConnected || netIsHost;
+  if(botPanel) botPanel.classList.toggle('show', show);
+  // класс на body: на мобильных сдвигает патроны вниз, чтобы не пересекаться с кнопкой ботов
+  document.body.classList.toggle('bot-ui', show);
 }
 function canManageBots(){
   const tag = document.activeElement && document.activeElement.tagName;
   if(tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return false;
   return !netConnected || netIsHost;
+}
+
+// --- ЛЕНТА УБИЙСТВ: записи «убийца 🔫 [оружие] жертва» справа под панелью ботов, живут 5с.
+// --- Люди выделяются жирным, боты — с пометкой 🤖 обычным шрифтом. Локальные убийства
+// --- показываются сразу и рассылаются другим через 'killfeed'; чужие приходят готовыми
+const killFeedEl = document.getElementById('killfeed');
+let killFeedItems = [];
+function kfName(name, team, isBot){
+  return `<span class="${team === 'red' ? 'kred' : 'kblue'}${isBot ? '' : ' human'}">${isBot ? '🤖 ' : ''}${String(name).replace(/[<>&]/g, '')}</span>`;
+}
+function addKillFeed(kName, kTeam, kBot, vName, vTeam, vBot, weapon, hs){
+  if(!killFeedEl || !kName || !vName) return;
+  const icon = weapon === '🔪' ? '🔪' : '🔫';
+  const wtxt = (weapon && weapon !== '🔪') ? `<span class="wpn">[${String(weapon).replace(/[<>&]/g, '')}${hs ? ' · HS' : ''}]</span>` : (hs ? '<span class="wpn">[HS]</span>' : '');
+  killFeedItems.push({ h: kfName(kName, kTeam, kBot) + ' ' + icon + ' ' + wtxt + ' ' + kfName(vName, vTeam, vBot), t: performance.now() });
+  if(killFeedItems.length > 5) killFeedItems.shift();
+  renderKillFeed();
+}
+function renderKillFeed(){
+  if(!killFeedEl) return;
+  const now = performance.now();
+  killFeedItems = killFeedItems.filter(it => now - it.t < 5000); // запись живёт 5с
+  killFeedEl.innerHTML = killFeedItems.map(it => `<div class="killfeed-item${now - it.t > 4200 ? ' fade' : ''}">${it.h}</div>`).join('');
+}
+setInterval(() => { if(killFeedItems.length) renderKillFeed(); }, 400); // гашение и удаление старых записей
+// Рассылка ленты другим игрокам (вызывается вместе с локальным addKillFeed у источника события)
+function netKillFeed(kName, kTeam, kBot, vName, vTeam, vBot, weapon, hs){
+  if(netConnected) netSend({type:'killfeed', k:kName, kt:kTeam, kb:kBot?1:0, v:vName, vt:vTeam, vb:vBot?1:0, w:weapon||'', hs:hs?1:0});
 }
 
 // --- ТАБЛИЦА СЧЁТА (Ё/~): игроки + боты, фраги/смерти; обнуляется на старте новой серии раундов ---
@@ -2007,7 +2162,7 @@ if(!isMobile){
   window.addEventListener('mousemove', e => {
     if(!playing || !roundActive) return;
     const w = getActiveWeapon();
-    const s = zoomed && w && w.zoom ? 0.0012 : 0.0028;
+    const s = (zoomed && w && w.zoom ? 0.0012 : 0.0028) * (settings.sens || 1); // множитель из настроек
     P.yaw += e.movementX * s;
     P.pitch -= e.movementY * s;
     P.pitch = Math.max(-1.5, Math.min(1.5, P.pitch));
@@ -2474,10 +2629,11 @@ function update(dt, t){
           const bd = Math.max(6, Math.min(18, (b.weapon.dmg || 30)*0.28*D.dmgMul));
           if(Math.random() < Math.max(0.25, D.hitBase - pd*D.hitFall)){
             if(T.ref === 'P') playerHit(bd*0.8, b.x, b.z, b);
-            else if(T.ref.netId) netSend({type:'damage',target:T.ref.netId,amount:bd*0.8,attackerTeam:b.team,killerBot:bots.indexOf(b)});
+            else if(T.ref.netId) netSend({type:'damage',target:T.ref.netId,amount:bd*0.8,attackerTeam:b.team,killerBot:bots.indexOf(b),kname:b.name});
             else if((T.ref.spawnProt||0) <= 0) { // бот-цель под защитой респауна — выстрел мимо
               T.ref.hp -= bd;
-              if(T.ref.hp <= 0 && T.ref.alive){ killBot(T.ref); b.frags = (b.frags||0) + 1; if(b.team === 'blue') scoreBots++; else scoreMe++; if(netConnected) netSend({type:'frag',team:b.team}); }
+              if(T.ref.hp <= 0 && T.ref.alive){ killBot(T.ref); b.frags = (b.frags||0) + 1; if(b.team === 'blue') scoreBots++; else scoreMe++; if(netConnected) netSend({type:'frag',team:b.team});
+                addKillFeed(b.name, b.team, true, T.ref.name, T.ref.team, true, b.weapon && b.weapon.name, false); netKillFeed(b.name, b.team, true, T.ref.name, T.ref.team, true, b.weapon && b.weapon.name, false); }
             }
           }
         } else b.shootT = 0.3;
@@ -2762,8 +2918,20 @@ function draw(t){
   const proj = persp(fovA, asp, 0.1, 200);
 
   const bob = (zoomed && w && w.zoom) ? 0 : Math.sin(walkTimer) * 0.03;
-  const eye = { x: P.x, y: P.y + eyeOff + bob, z: P.z };
-  const vp = mul(proj, view(eye.x, eye.y, eye.z, P.yaw, P.pitch));
+  // СПЕКТАТОР-КАМЕРА: во время паузы смерти (2с) камера облетает место смерти по дуге
+  // и смотрит на тело; после респауна возвращается к обычному виду от первого лица
+  let eye, camYaw = P.yaw, camPitch = P.pitch;
+  if(deathPauseT > 0){
+    const ang = (2 - deathPauseT) * 1.6; // ~180° за 2 секунды
+    const r = 3.4;
+    eye = { x: P.x + Math.sin(ang) * r, y: P.y + 2.4, z: P.z + Math.cos(ang) * r };
+    const ddx = P.x - eye.x, ddy = (P.y + 1.2) - eye.y, ddz = P.z - eye.z;
+    camYaw = Math.atan2(ddx, -ddz);
+    camPitch = Math.atan2(ddy, Math.hypot(ddx, ddz) || 1);
+  } else {
+    eye = { x: P.x, y: P.y + eyeOff + bob, z: P.z };
+  }
+  const vp = mul(proj, view(eye.x, eye.y, eye.z, camYaw, camPitch));
   updateTags(vp, eye);
 
   gl.uniformMatrix4fv(loc.mvp, false, new Float32Array(vp));
@@ -2865,8 +3033,8 @@ function draw(t){
   gl.depthMask(true);
   gl.disable(gl.BLEND);
 
-  // 5. Оружие
-  if(w && roundActive && !zoomed){
+  // 5. Оружие (во время паузы смерти прячем — камера-спектатор облетает сцену)
+  if(w && roundActive && !zoomed && deathPauseT <= 0){
     gl.clear(gl.DEPTH_BUFFER_BIT);
     const projUI = persp(Math.max(1.0, Math.min(1.9, 2*Math.atan(0.6/(cv.width/cv.height)))), cv.width/cv.height, 0.01, 20);
     const wSwayX = Math.sin(walkTimer * 0.6) * 0.012;
