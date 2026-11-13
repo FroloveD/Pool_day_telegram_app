@@ -49,7 +49,10 @@
   @keyframes rotphone{from{transform:rotate(0)}to{transform:rotate(90deg)}}
   @media (orientation:portrait){ body.force-landscape #rotate-hint{display:flex} }
   
-  .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(0,10,25,.96);color:#fff;text-align:center;z-index:10;pointer-events:auto}
+  /* height:var(--app-h) — фикс «верх страницы скрыт» в Telegram (особенно iOS): 100vh вебвью
+     больше видимой области, поэтому высоту меню берём из viewportStableHeight (задаётся в JS).
+     overflow:auto — если контент меню всё же выше экрана, его можно прокрутить */
+  .overlay{position:fixed;inset:0;height:var(--app-h,100%);overflow:auto;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(0,10,25,.96);color:#fff;text-align:center;z-index:10;pointer-events:auto}
   .overlay h1{margin:0;font-size:32px;color:#ffd76e}
   .overlay p{margin:0;opacity:.85;line-height:1.6;font-size:14px;max-width:600px}
   .overlay button{pointer-events:auto;font-size:18px;padding:14px 36px;border:0;border-radius:8px;background:#2f8f4e;color:#fff;cursor:pointer;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.5);z-index:11}
@@ -100,6 +103,8 @@
   #scoreboard th{font-size:11px;color:#8fa8bf;text-align:left;padding:3px 8px;border-bottom:1px solid #3a5a78}
   #scoreboard td{padding:3px 8px;border-bottom:1px solid #22344a}
   #scoreboard tr.me td{font-weight:800}
+  /* Индикатор защиты спавна: щит + оставшиеся секунды, виден только пока действует */
+  #prot{display:none;font-size:15px;color:#8fd6ff;text-shadow:0 1px 3px #000;margin-top:2px}
   /* Заголовки секций команд в таблицах (Ё/~ и итоги раунда): цвет = цвет команды,
      в заголовке дублируется суммарный фраг команды */
   #scoreboard th.team-h,#roundover-board th.team-h{font-size:12px;padding:6px 8px 4px;letter-spacing:.05em}
@@ -224,6 +229,7 @@
   <div id="dmg-indicator"><div id="dmg-arrow"></div></div>
   <div id="stats">Красные 0 : 0 Синие</div>
   <div id="hp">❤ 100</div>
+  <div id="prot" style="display:none">🛡 0.7</div>
   <div id="wname" onclick="cycleWeaponSlot()"></div>
   <div id="ammo">🔫 30 / ∞</div>
   <div id="msg"></div>
@@ -323,7 +329,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.22';
+const GAME_VERSION = 'v1.23';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -1377,7 +1383,33 @@ function ensureAudio(){
 // Настройки (громкости + чувствительность мыши), сохранение в localStorage между сессиями
 let settings = { fx: 0.9, step: 0.8, music: 0.35, sens: 1, track: 'pool' };
 try{ Object.assign(settings, JSON.parse(localStorage.getItem('fypd_settings') || '{}')); }catch(e){}
-function saveSettings(){ try{ localStorage.setItem('fypd_settings', JSON.stringify(settings)); }catch(e){} }
+function saveSettings(){
+  try{ localStorage.setItem('fypd_settings', JSON.stringify(settings)); }catch(e){}
+  // Дублируем в Telegram CloudStorage: на iOS localStorage вебвью Telegram иногда не переживает
+  // перезапуск приложения, а облако привязано к аккаунту и хранится надёжно
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if(tg && tg.CloudStorage && typeof tg.CloudStorage.setItem === 'function'){
+    try{ tg.CloudStorage.setItem('fypd_settings', JSON.stringify(settings)); }catch(e){}
+  }
+}
+// Асинхронная догрузка настроек из облака Telegram: применяем ТОЛЬКО если локальных настроек
+// нет (localStorage очищен на iOS) — иначе локальные всегда новее и приоритетнее
+(function restoreCloudSettings(){
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if(!tg || !tg.CloudStorage || typeof tg.CloudStorage.getItem !== 'function') return;
+  try{
+    tg.CloudStorage.getItem('fypd_settings', (err, v) => {
+      if(err || !v || localStorage.getItem('fypd_settings')) return;
+      try{
+        Object.assign(settings, JSON.parse(v));
+        try{ localStorage.setItem('fypd_settings', JSON.stringify(settings)); }catch(e){}
+        if(typeof applyVolumes === 'function') applyVolumes();
+        const tr = document.getElementById('music-track'); if(tr) tr.value = settings.track || 'pool';
+        document.querySelectorAll('#settings-panel input[data-set]').forEach(inp => { inp.value = settings[inp.dataset.set]; });
+      }catch(e){}
+    });
+  }catch(e){}
+})();
 function applyVolumes(){
   if(!AC) return;
   gFx.gain.value = settings.fx;
@@ -1571,9 +1603,10 @@ function beep(type){
   const dest = (type === 'step' || type === 'jump' || type === 'land') ? gStep : gFx;
   const o = AC.createOscillator(), g = AC.createGain();
   o.type = type === 'shot' ? 'square' : (type === 'hit' || type === 'head') ? 'sine' : (type === 'step' || type === 'jump' || type === 'land') ? 'triangle' : 'sawtooth';
-  o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'head' ? 1250 : type === 'hit' ? 800 : type === 'step' ? 85 + Math.random()*35 : type === 'jump' ? 220 : type === 'land' ? 60 : 100;
+  // прыжок/приземление слышимы и на телефонных динамиках: частоты не ниже ~110 Гц
+  o.frequency.value = type === 'shot' ? 140 + Math.random()*40 : type === 'head' ? 1250 : type === 'hit' ? 800 : type === 'step' ? 85 + Math.random()*35 : type === 'jump' ? 260 : type === 'land' ? 110 : 100;
   const dur = type === 'shot' ? 0.07 : type === 'head' ? 0.18 : type === 'step' ? 0.05 : type === 'jump' ? 0.08 : type === 'land' ? 0.1 : 0.12;
-  g.gain.setValueAtTime(type === 'shot' ? 0.08 : type === 'step' ? 0.03 : type === 'jump' ? 0.04 : type === 'land' ? 0.06 : 0.1, AC.currentTime);
+  g.gain.setValueAtTime(type === 'shot' ? 0.08 : type === 'step' ? 0.03 : type === 'jump' ? 0.09 : type === 'land' ? 0.13 : 0.1, AC.currentTime);
   g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
   o.connect(g).connect(dest);
   o.start(); o.stop(AC.currentTime + dur + 0.04);
@@ -1893,12 +1926,29 @@ function shoot(){
     if(t !== null && t < bestT){ bestT=t; hitBot=null; hitPlayer=p; }
   });
 
+  // СОЮЗНИКИ БЛОКИРУЮТ ПУЛИ: попадание в напарника (бот или игрок своей команды) гасит
+  // выстрел без урона и хитмаркера — нельзя ранить своего и нельзя прострелить его
+  // (как в CS с выключенным friendly fire). Союзник под защитой спавна тоже остановит пулю
+  let hitAlly = null;
+  bots.forEach(b => {
+    if(!b.alive || b.team !== P.team) return;
+    const t = rayAABB(P.x, oy, P.z, dx, dy, dz, {x:b.x, y:b.y+0.9, z:b.z, sx:0.8, sy:1.8, sz:0.8});
+    if(t !== null && t < bestT){ bestT = t; hitBot = null; hitPlayer = null; hitAlly = b; }
+  });
+  netPlayers.forEach(p => {
+    if(!p.alive || p.team !== P.team) return;
+    const t = rayAABB(P.x, oy, P.z, dx, dy, dz, {x:p.x, y:p.y+0.9, z:p.z, sx:0.8, sy:1.8, sz:0.8});
+    if(t !== null && t < bestT){ bestT = t; hitBot = null; hitPlayer = null; hitAlly = p; }
+  });
+
   colliders.forEach(c => {
     const t = rayAABB(P.x, oy, P.z, dx, dy, dz, c);
-    if(t !== null && t < bestT){ bestT = t; hitBot = null; hitC = c; }
+    // стена ближе всех — сбрасываем ВСЕ ссылки на цели (иначе устаревшая ссылка на игрока
+    // могла дать урон сквозь стену)
+    if(t !== null && t < bestT){ bestT = t; hitBot = null; hitPlayer = null; hitAlly = null; hitC = c; }
   });
-  if(dy < -1e-4){ const t = -oy/dy; if(t > 0 && t < bestT){ bestT = t; hitBot = null; hitC = null; hitPlane = -1; } }
-  else if(dy > 1e-4){ const t = (H - oy)/dy; if(t > 0 && t < bestT){ bestT = t; hitBot = null; hitC = null; hitPlane = 1; } }
+  if(dy < -1e-4){ const t = -oy/dy; if(t > 0 && t < bestT){ bestT = t; hitBot = null; hitPlayer = null; hitAlly = null; hitC = null; hitPlane = -1; } }
+  else if(dy > 1e-4){ const t = (H - oy)/dy; if(t > 0 && t < bestT){ bestT = t; hitBot = null; hitPlayer = null; hitAlly = null; hitC = null; hitPlane = 1; } }
 
   const ip = [P.x + dx*bestT, oy + dy*bestT, P.z + dz*bestT];
   if(hitBot && (hitBot.spawnProt||0) > 0){
@@ -2010,6 +2060,15 @@ if (tgApp) {
     // вниз/вверх зарезервирован под «закрыть Mini App», и в шутере с сенсорным обзором
     // игрок случайно закрывал бы игру посреди боя. На старых клиентах метода нет — тихо пропускаем.
     if (typeof tgApp.disableVerticalSwipes === 'function') { try { tgApp.disableVerticalSwipes(); } catch (e) {} }
+    // Фикс прокрутки/обрезки верха в Telegram (особенно iOS): 100vh в вебвью больше видимой
+    // области (шапка Telegram, клавиатура). Задаём --app-h из viewportStableHeight — стабильной
+    // высоты видимой части — и обновляем при каждом изменении viewport
+    const applyVh = () => {
+      const h = tgApp.viewportStableHeight || tgApp.viewportHeight || window.innerHeight;
+      document.documentElement.style.setProperty('--app-h', Math.round(h) + 'px');
+    };
+    applyVh();
+    if (tgApp.onEvent) tgApp.onEvent('viewportChanged', applyVh);
     if (tgApp.themeParams) {
       document.documentElement.style.setProperty('--tg-bg', tgApp.themeParams.bg_color || '#000');
     }
@@ -2074,7 +2133,7 @@ function netConnect(){
           p = {netId:m.id, name:m.name || 'Игрок', team:m.team || 'blue', model:BOT_MODELS[0], weapon:WEAPONS.find(w=>w.name==='AK-47'), alive:true, hp:100,maxHp:100,y:0,vy:0,rotY:0,yawS:0,pitchS:0,aim:1,walkT:0,spd:0,vx:0,vz:0,kick:0,flash:0,diedAt:0,fr:0,de:0,seed:Math.random()*6};
           netPlayers.set(m.id,p);
         }
-        Object.assign(p,{name:m.name||p.name,team:m.team||p.team,yaw:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
+        Object.assign(p,{name:m.name||p.name,team:m.team||p.team,yaw:m.yaw||0,pitchS:m.pitch||0,hp:m.hp??100,alive:m.alive!==false,spawnProt:m.sp||0,weapon:WEAPONS.find(w=>w.name===m.weapon)||p.weapon,spd:m.spd||0,fr:m.fr||0,de:m.de||0});
         // чужой игрок выстрелил: флаг fl пришёл 1, а в прошлый раз был 0 → звук с затуханием
         if(m.fl && !p._sfl) gunSound(p.weapon, Math.hypot((p.x||0)-P.x,(p.z||0)-P.z));
         p._sfl = !!m.fl; // запоминаем прошлое состояние, чтобы звук не повторялся каждый пакет
@@ -2173,7 +2232,7 @@ function netPublish(now){
   if(now-netLastSend>50){
     netLastSend=now;
     const w=getActiveWeapon();
-    netSend({type:'player',x:+P.x.toFixed(3),y:+P.y.toFixed(3),z:+P.z.toFixed(3),yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),hp:P.hp,alive:P.hp>0,team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths,fl:netShotT>0?1:0}); // fl — факт выстрела для звука у других
+    netSend({type:'player',x:+P.x.toFixed(3),y:+P.y.toFixed(3),z:+P.z.toFixed(3),yaw:+P.yaw.toFixed(3),pitch:+P.pitch.toFixed(3),hp:P.hp,alive:P.hp>0,sp:+(P.spawnProt||0).toFixed(2),team:P.team,name:netName,weapon:w&&w.name,spd:P.speed,fr:statFrags,de:statDeaths,fl:netShotT>0?1:0}); // fl — факт выстрела для звука у других
   }
   if(netIsHost && now-netLastBots>100){
     netLastBots=now;
@@ -2692,7 +2751,7 @@ function groundHeight(x, z){
   return g;
 }
 
-const statsEl = document.getElementById('stats'), hpEl = document.getElementById('hp'), ammoEl = document.getElementById('ammo');
+const statsEl = document.getElementById('stats'), hpEl = document.getElementById('hp'), ammoEl = document.getElementById('ammo'), protEl = document.getElementById('prot');
 const armorEqEl = document.getElementById('armor-equip');
 const crossEl = document.getElementById('cross');
 const scopeEl = document.getElementById('scope');
@@ -2706,13 +2765,17 @@ function frame(now){
   const ipk = 1 - Math.exp(-dt*14);
   netPlayers.forEach(p => {
     if(p.nx === undefined) return;
-    p.x += (p.nx - p.x)*ipk; p.y += (p.ny - p.y)*ipk; p.z += (p.nz - p.z)*ipk;
+    // Большое рассогласование = телепорт/респаун/первый снапшот: доводим мгновенно,
+    // иначе модель «перелетает» через полкарты за время экспоненциального сглаживания
+    if(Math.hypot(p.nx - p.x, p.ny - p.y, p.nz - p.z) > 3){ p.x = p.nx; p.y = p.ny; p.z = p.nz; }
+    else { p.x += (p.nx - p.x)*ipk; p.y += (p.ny - p.y)*ipk; p.z += (p.nz - p.z)*ipk; }
     let dy = p.nyaw - p.rotY; dy = ((dy + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI;
     p.rotY += dy*ipk; p.yawS = p.rotY; p.yaw = p.rotY;
   });
   if(netConnected && !netIsHost) bots.forEach(b => {
     if(b.nx === undefined) return;
-    b.x += (b.nx - b.x)*ipk; b.y += (b.ny - b.y)*ipk; b.z += (b.nz - b.z)*ipk;
+    if(Math.hypot(b.nx - b.x, b.ny - b.y, b.nz - b.z) > 3){ b.x = b.nx; b.y = b.ny; b.z = b.nz; }
+    else { b.x += (b.nx - b.x)*ipk; b.y += (b.ny - b.y)*ipk; b.z += (b.nz - b.z)*ipk; }
     let dy = b.nrotY - b.rotY; dy = ((dy + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI;
     b.rotY += dy*ipk;
     let dy2 = b.nyawS - b.yawS; dy2 = ((dy2 + Math.PI) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI) - Math.PI;
@@ -2927,8 +2990,11 @@ function update(dt, t){
       reloading -= dt;
       if(reloading <= 0){ const w = getActiveWeapon(); if(w) ammo = w.mag; }
     }
-    // тик неуязвимости после респауна (0.75с)
-    if(P.spawnProt > 0) P.spawnProt -= dt;
+    // тик неуязвимости после респауна (0.75с) + индикатор щита на HUD (виден, пока действует)
+    if(P.spawnProt > 0){
+      P.spawnProt -= dt;
+      if(protEl){ protEl.style.display = 'inline-block'; protEl.textContent = '🛡 ' + P.spawnProt.toFixed(1); }
+    } else if(protEl && protEl.style.display !== 'none') protEl.style.display = 'none';
     // пауза после смерти: 1.25с показывается «ПОТРАЧЕНО», затем респаун на базе,
     // включение защиты 0.75с, гашение надписи (1с) и меню покупки
     if(deathPauseT > 0){
@@ -3185,6 +3251,28 @@ function drawShadows(){
   gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(loc.alpha, 1.0);
 }
 
+// ЩИТ ЗАЩИТЫ СПАВНА: полупрозрачная пульсирующая сфера вокруг бота/игрока, который
+// неуязвим после респауна (0.75с). Цвет — по команде. Рисуется с прозрачностью поверх
+// моделей (как тени), чтобы эффект читался, но не закрывал бойца
+function drawSpawnShields(){
+  const list = [];
+  bots.forEach(b => { if(b.alive && (b.spawnProt||0) > 0) list.push(b); });
+  netPlayers.forEach(p => { if(p.alive && (p.spawnProt||0) > 0) list.push(p); });
+  if(!list.length) return;
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+  gl.uniform1f(loc.alpha, 0.26);
+  bindMesh(MESH.s);
+  const nowMs = performance.now();
+  list.forEach(b => {
+    const pulse = 1 + Math.sin(nowMs*0.012)*0.05; // лёгкая пульсация — эффект временный
+    const s = 1.1 * pulse;
+    gl.uniformMatrix4fv(loc.model, false, new Float32Array(mul(mT(b.x, b.y + 0.9, b.z), mS(s, s*1.2, s))));
+    gl.uniform3fv(loc.col, b.team === 'red' ? [1, 0.45, 0.35] : [0.35, 0.7, 1]);
+    gl.drawElements(gl.TRIANGLES, MESH.s.n, gl.UNSIGNED_SHORT, 0);
+  });
+  gl.depthMask(true); gl.disable(gl.BLEND); gl.uniform1f(loc.alpha, 1.0);
+}
+
 function draw(t){
   if(!gl) return;
   gl.clearColor(0.55, 0.75, 0.9, 1);
@@ -3205,8 +3293,20 @@ function draw(t){
   let eye, camYaw = P.yaw, camPitch = P.pitch;
   if(deathPauseT > 0){
     const ang = (2 - deathPauseT) * 1.6; // ~180° за 2 секунды
-    const r = 3.4;
-    eye = { x: P.x + Math.sin(ang) * r, y: P.y + 2.4, z: P.z + Math.cos(ang) * r };
+    // Коллизия камеры: пускаем луч от головы (места смерти) в направлении орбитальной камеры
+    // и пропорционально укорачиваем вектор смещения до точки перед стеной — иначе камера
+    // заглядывала внутрь геометрии
+    let k = 1; // коэффициент сжатия вектора смещения (1 = полный радиус)
+    {
+      const ex = Math.sin(ang) * 3.4, ez = Math.cos(ang) * 3.4, ey = 2.4;
+      const vl = Math.hypot(ex, ey, ez) || 1;
+      for(const c of colliders){
+        const tt = rayAABB(P.x, P.y + 1.2, P.z, ex/vl, ey/vl, ez/vl, c);
+        if(tt !== null){ k = Math.min(k, tt/vl); }
+      }
+      k = Math.max(0.3, k * 0.85); // немного отступаем от стены, чтобы не «липнуть» к текстуре
+    }
+    eye = { x: P.x + Math.sin(ang) * 3.4 * k, y: P.y + 1.2 + 2.4 * k, z: P.z + Math.cos(ang) * 3.4 * k };
     const ddx = P.x - eye.x, ddy = (P.y + 1.2) - eye.y, ddz = P.z - eye.z;
     camYaw = Math.atan2(ddx, -ddz);
     camPitch = Math.atan2(ddy, Math.hypot(ddx, ddz) || 1);
@@ -3287,6 +3387,7 @@ function draw(t){
   // 3. Боты: детализированные модели со скелетной анимацией
   const nowMs = performance.now();
   drawShadows();
+  drawSpawnShields();
   bots.forEach(b => {
     if(!b.alive && !(b.diedAt && nowMs - b.diedAt < 1600)) return;
     drawBot(b, nowMs);
