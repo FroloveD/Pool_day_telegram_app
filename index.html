@@ -296,7 +296,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.19';
+const GAME_VERSION = 'v1.20';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -359,6 +359,11 @@ try{
         const el = document.documentElement;
         const req = el.requestFullscreen ? el.requestFullscreen() : (el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : null);
         if(req && req.catch) req.catch(() => {});
+        // На iPhone браузерный запасной путь не работает (Safari не умеет requestFullscreen),
+        // поэтому сразу объясняем: лечится только обновлением Telegram
+        if(/iPhone|iPad|iPod/i.test(navigator.userAgent) && typeof netStatus === 'function'){
+          netStatus('⚠ Полный экран недоступен — обнови Telegram в App Store (нужна версия 11+)');
+        }
       }catch(e){}
     });
   }
@@ -371,9 +376,15 @@ function goLandscape(ev){
   if(tgNativeFullscreen()) return;
   const fail = () => {
     if(!ev) return;
-    netStatus('⚠ Полный экран недоступен во встроенном браузере Telegram — открой игру в Chrome, либо просто поверни телефон');
+    // На iPhone Safari вообще не поддерживает requestFullscreen (и Chrome на iOS — тот же
+    // движок WKWebView), поэтому совет «открой в Chrome» бессмыслен: единственное решение —
+    // обновить Telegram до версии с Bot API 8.0 (Telegram 11+, где fullscreen встроен в клиент)
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    netStatus(ios
+      ? '⚠ Полный экран недоступен — обнови Telegram в App Store (нужна версия 11+), либо просто поверни телефон'
+      : '⚠ Полный экран недоступен во встроенном браузере Telegram — открой игру в Chrome, либо просто поверни телефон');
     const landBtn = document.getElementById('btn-land');
-    if(landBtn) landBtn.textContent = '⚠ Полный экран недоступен в Telegram — открой в Chrome';
+    if(landBtn) landBtn.textContent = ios ? '⚠ Обнови Telegram (App Store) для полного экрана' : '⚠ Полный экран недоступен в Telegram — открой в Chrome';
   };
   try {
     const el = document.documentElement;
@@ -381,6 +392,16 @@ function goLandscape(ev){
     if(!req){ fail(); return; }
     Promise.resolve(req).then(() => screen.orientation && screen.orientation.lock ? screen.orientation.lock('landscape') : null).catch(fail);
   } catch(e) { fail(); }
+  // Контроль факта через 1,5 с: если fullscreen так и не включился на iOS — объясняем причину.
+  // Нужно для случая, когда нативный вызов прошёл без исключения, но Telegram его тихо отклонил
+  setTimeout(() => {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if(!tg || typeof netStatus !== 'function') return;
+    const inFs = tg.isFullscreen || !!document.fullscreenElement;
+    if(!inFs && /iPhone|iPad|iPod/i.test(navigator.userAgent)){
+      netStatus('⚠ Полный экран недоступен — обнови Telegram в App Store (нужна версия 11+), либо просто поверни телефон');
+    }
+  }, 1500);
 }
 window.addEventListener('orientationchange', () => setTimeout(() => window.dispatchEvent(new Event('resize')), 250));
 
