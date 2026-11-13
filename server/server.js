@@ -7,7 +7,7 @@ const path = require("path");
 const PORT = Number(process.env.PORT || 8080);
 const MAX_ROOM_PLAYERS = Number(process.env.MAX_ROOM_PLAYERS || 10); // лимит игроков на комнату
 const ROOM_EMPTY_TTL_MS = 10 * 60 * 1000; // пустая комната живёт не дольше 10 минут
-const VERSION = "1.28"; // версия билда; синхронизируется с GAME_VERSION в index.html
+const VERSION = "1.29"; // версия билда; синхронизируется с GAME_VERSION в index.html
 const INTERNET_MODE = process.argv.includes("--internet");
 const rooms = new Map();
 

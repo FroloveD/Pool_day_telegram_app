@@ -317,7 +317,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.28';
+const GAME_VERSION = 'v1.29';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -2092,12 +2092,33 @@ if (tgApp) {
     // Фикс прокрутки/обрезки верха в Telegram (особенно iOS): 100vh в вебвью больше видимой
     // области (шапка Telegram, клавиатура). Задаём --app-h из viewportStableHeight — стабильной
     // высоты видимой части — и обновляем при каждом изменении viewport
+    // Логика высоты при клавиатуре: viewportStableHeight НЕ уменьшается при открытой клавиатуре,
+    // поэтому меню оставалось прежней высоты, поле ввода оказывалось ПОД клавиатурой и экран
+    // до него не прокручивался. Если текущий viewport заметно меньше стабильного — клавиатура
+    // открыта, берём реальную видимую высоту: оверлей сжимается, и всё поле видно.
+    let kbOpen = false; // флаг «клавиатура сейчас открыта» для автопрокрутки к полю
     const applyVh = () => {
-      const h = tgApp.viewportStableHeight || tgApp.viewportHeight || window.innerHeight;
-      document.documentElement.style.setProperty('--app-h', Math.round(h) + 'px');
+      const stable = tgApp.viewportStableHeight || 0;
+      const cur = tgApp.viewportHeight || window.innerHeight;
+      if (stable && cur && cur < stable - 20) { // порог 20px отсекает дребезг от анимации шапки
+        kbOpen = true;
+        document.documentElement.style.setProperty('--app-h', Math.round(cur) + 'px');
+      } else {
+        kbOpen = false;
+        document.documentElement.style.setProperty('--app-h', Math.round(stable || cur || window.innerHeight) + 'px');
+      }
     };
+    // Автопрокрутка к сфокусированному полю: клавиатура раскрывается ~300мс, поэтому ждём
+    // и плавно подводим поле к центру видимой области (внутри скроллящегося .overlay)
+    const scrollFocusedIntoView = () => {
+      const a = document.activeElement;
+      if (a && a.matches && a.matches('.overlay input, .overlay select')) {
+        setTimeout(() => { try { a.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { try { a.scrollIntoView(); } catch (e2) {} } }, 120);
+      }
+    };
+    document.addEventListener('focusin', () => setTimeout(() => { applyVh(); scrollFocusedIntoView(); }, 350));
     applyVh();
-    if (tgApp.onEvent) tgApp.onEvent('viewportChanged', applyVh);
+    if (tgApp.onEvent) tgApp.onEvent('viewportChanged', () => { applyVh(); scrollFocusedIntoView(); });
     if (tgApp.themeParams) {
       document.documentElement.style.setProperty('--tg-bg', tgApp.themeParams.bg_color || '#000');
     }
