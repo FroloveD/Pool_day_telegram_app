@@ -195,11 +195,27 @@
   #rotate button{padding:10px 22px;font-size:15px;border-radius:8px;border:0;background:#34506b;color:#fff}
   #mob-opts{display:none;margin-top:6px;font-size:12px;color:#cfd8e3;gap:6px 14px;flex-wrap:wrap;justify-content:center;max-width:520px}
   #mob-opts label{white-space:nowrap}
+  /* Подсказка для Safari на iPhone: Safari не умеет requestFullscreen, полный экран —
+     только через установку игры на домашний экран (PWA standalone). Карточка поверх меню */
+  #safari-hint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:12;display:none;flex-direction:column;align-items:center;gap:10px;background:rgba(5,12,22,.95);border:1px solid #3a5a78;border-radius:12px;padding:18px 22px;color:#fff;font:14px/1.5 system-ui,sans-serif;text-align:center;max-width:340px;pointer-events:auto}
+  #safari-hint .sh-title{font-size:16px;font-weight:700;color:#ffd76e}
+  #safari-hint ol{text-align:left;margin:0;padding-left:20px}
+  #safari-hint button{margin-top:4px;padding:8px 20px;font-size:14px;border-radius:8px;border:0;background:#34506b;color:#fff;cursor:pointer}
 </style>
 </head>
 <body>
 <div id="rotate"><div class="ph"></div><p>Игра работает только в горизонтальной ориентации.<br>Поверните устройство набок.</p><button type="button" onclick="goLandscape(event)">⛶ Во весь экран · горизонтально</button></div>
 <div id="err"></div>
+<div id="safari-hint" style="display:none">
+  <div class="sh-title">📲 Полный экран в Safari</div>
+  <p style="margin:0">Safari на iPhone не поддерживает полноэкранный режим. Чтобы играть на весь экран:</p>
+  <ol>
+    <li>Нажми <b>«Поделиться»</b> (квадрат со стрелкой ↑)</li>
+    <li>Выбери <b>«На экран „Домой“»</b></li>
+    <li>Запускай игру с иконки — она откроется без панелей Safari</li>
+  </ol>
+  <button type="button" id="safari-hint-ok">Понятно</button>
+</div>
 <div id="rotate-hint" onclick="goLandscape(event)"><div class="ico">📱</div>Поверните телефон горизонтально<br><span style="font-size:14px;opacity:.7">игра идёт только в альбомном режиме · нажми, чтобы развернуть автоматически</span></div>
 <canvas id="c"></canvas>
 <div id="hud">
@@ -307,7 +323,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.21';
+const GAME_VERSION = 'v1.22';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -3341,6 +3357,27 @@ function checkOrient(){
 }
 window.addEventListener('resize', checkOrient);
 window.addEventListener('orientationchange', () => setTimeout(checkOrient, 200));
+
+// --- Подсказка для Safari на iPhone (показывается один раз) ---
+// Логика показа: устройство iOS, НО не Telegram (там свой нативный fullscreen) и НЕ
+// standalone-режим (уже запущено с иконки — подсказка не нужна). Факт показа сохраняется
+// в localStorage, чтобы не раздражать игрока при каждом заходе
+(function safariHint(){
+  try{
+    if(!/iPhone|iPod/i.test(navigator.userAgent)) return;
+    if(window.Telegram && window.Telegram.WebApp) return;
+    const standalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    if(standalone) return;
+    if(localStorage.getItem('fypd_safari_hint')) return;
+    const el = document.getElementById('safari-hint');
+    if(!el) return;
+    setTimeout(() => { el.style.display = 'flex'; }, 600); // небольшая задержка — дать меню загрузиться
+    document.getElementById('safari-hint-ok').addEventListener('click', () => {
+      el.style.display = 'none';
+      try{ localStorage.setItem('fypd_safari_hint', '1'); }catch(e){}
+    });
+  }catch(e){}
+})();
 if(isHandheld){
   try{ screen.orientation.lock('landscape').catch(() => {}); }catch(e){}
   // при первом касании — полноэкранный режим с блокировкой ландшафта (где браузер это позволяет)
