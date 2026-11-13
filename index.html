@@ -94,6 +94,9 @@
   #scoreboard th{font-size:11px;color:#8fa8bf;text-align:left;padding:3px 8px;border-bottom:1px solid #3a5a78}
   #scoreboard td{padding:3px 8px;border-bottom:1px solid #22344a}
   #scoreboard tr.me td{font-weight:800}
+  /* люди — жирным, боты — приглушённым курсивом с пометкой 🤖: видно кто есть кто */
+  #scoreboard .human{font-weight:800}
+  #scoreboard .bot{opacity:.75;font-style:italic}
   #scoreboard .tred{color:#ff6b6b}#scoreboard .tblue{color:#6bb8ff}
   #scoreboard td:nth-child(2),#scoreboard td:nth-child(3),#scoreboard th:nth-child(2),#scoreboard th:nth-child(3){text-align:right}
   #scoreboard .hint{margin-top:8px;font-size:11px;opacity:.6;text-align:center}
@@ -2068,7 +2071,10 @@ function renderScoreboard(){
   rows.sort((a, b) => b.fr - a.fr || a.de - b.de);
   let h = '<table><tr><th>Игрок</th><th>Фраги</th><th>Смерти</th></tr>';
   rows.forEach(r => {
-    h += `<tr${r.me ? ' class="me"' : ''}><td class="${r.team === 'red' ? 'tred' : 'tblue'}">${(r.bot ? '🤖 ' : '') + String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
+    // люди — жирным (класс human), боты — приглушённым курсивом с 🤖 (класс bot);
+    // своя строка дополнительно жирнее всей (tr.me)
+    const cls = (r.team === 'red' ? 'tred' : 'tblue') + ' ' + (r.bot ? 'bot' : 'human');
+    h += `<tr${r.me ? ' class="me"' : ''}><td class="${cls}">${(r.bot ? '🤖 ' : '') + String(r.name).replace(/[<>&]/g, '')}</td><td>${r.fr}</td><td>${r.de}</td></tr>`;
   });
   scoreboardRowsEl.innerHTML = h + '</table>';
 }
