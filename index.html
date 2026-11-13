@@ -296,7 +296,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.18';
+const GAME_VERSION = 'v1.19';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -1958,6 +1958,10 @@ else { const me = document.getElementById('net-mode'); if (me && me.value === 'c
 if (tgApp) {
   try {
     tgApp.ready(); tgApp.expand();
+    // Отключаем вертикальные свайпы Telegram (Bot API 7.7+): в fullscreen на iOS свайп
+    // вниз/вверх зарезервирован под «закрыть Mini App», и в шутере с сенсорным обзором
+    // игрок случайно закрывал бы игру посреди боя. На старых клиентах метода нет — тихо пропускаем.
+    if (typeof tgApp.disableVerticalSwipes === 'function') { try { tgApp.disableVerticalSwipes(); } catch (e) {} }
     if (tgApp.themeParams) {
       document.documentElement.style.setProperty('--tg-bg', tgApp.themeParams.bg_color || '#000');
     }
