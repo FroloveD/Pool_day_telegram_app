@@ -296,7 +296,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.17';
+const GAME_VERSION = 'v1.18';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -331,8 +331,44 @@ window.addEventListener('touchstart', function forceOrientOnce(){
   if(isHandheld) goLandscape();
 }, {once:true, passive:true});
 
+// ---------- Нативный полноэкранный режим Telegram (Bot API 8.0+) ----------
+// Встроенный браузер Telegram часто запрещает обычный requestFullscreen, поэтому сначала
+// пробуем нативный метод Mini App (tg.requestFullscreen), а браузерный — как запасной.
+// Возвращает true, если вызов состоялся (результат может прийти асинхронно событиями
+// fullscreenChanged/fullscreenFailed — старые клиенты Telegram просто не имеют метода).
+function tgNativeFullscreen(){
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if(!tg || typeof tg.requestFullscreen !== 'function') return false;
+  try{
+    tg.requestFullscreen();
+    // lockOrientation фиксирует ТЕКУЩУЮ ориентацию — фиксируем только если уже ландшафт,
+    // иначе в портретном положении пользователь окажется заблокирован вертикально
+    if(typeof tg.lockOrientation === 'function' && window.innerWidth > window.innerHeight){
+      try{ tg.lockOrientation(); }catch(e){}
+    }
+    return true;
+  }catch(e){ return false; }
+}
+// Если Telegram отклонил нативный fullscreen (старая версия приложения, запрет жеста) —
+// тихо откатываемся на браузерный requestFullscreen, чтобы не оставлять игрока без Fullscreen
+try{
+  const tgFail = window.Telegram && window.Telegram.WebApp;
+  if(tgFail && typeof tgFail.addEventListener === 'function'){
+    tgFail.addEventListener('fullscreenFailed', () => {
+      try{
+        const el = document.documentElement;
+        const req = el.requestFullscreen ? el.requestFullscreen() : (el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : null);
+        if(req && req.catch) req.catch(() => {});
+      }catch(e){}
+    });
+  }
+}catch(e){}
+
 function goLandscape(ev){
   if(ev) ev.stopPropagation();
+  // Порядок попыток: 1) нативный Telegram-fullscreen (надёжнее внутри Telegram);
+  // 2) если метода нет (старый Telegram) — браузерный requestFullscreen (прежний путь)
+  if(tgNativeFullscreen()) return;
   const fail = () => {
     if(!ev) return;
     netStatus('⚠ Полный экран недоступен во встроенном браузере Telegram — открой игру в Chrome, либо просто поверни телефон');
