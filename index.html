@@ -293,6 +293,7 @@
   <button type="button" onclick="startBuyingProcess(event)">Играть →</button>
   <button type="button" id="btn-controls-mode" style="background:#34506b" onclick="toggleControlsMode(event)"></button>
   <button type="button" id="btn-land" style="display:none;background:#34506b" onclick="goLandscape(event)">⛶ Полный экран · горизонтально</button>
+  <button type="button" id="btn-chrome" style="display:none;background:#34506b" onclick="openInBrowser(event)">🌐 Открыть в браузере · полный экран</button>
   <div id="mob-opts"><span>Если управление ведёт себя наоборот:</span>
     <label><input type="checkbox" data-k="invJoyY"> джойстик ↕</label> <label><input type="checkbox" data-k="invJoyX"> джойстик ↔</label>
     <label><input type="checkbox" data-k="invLookY"> обзор ↕</label> <label><input type="checkbox" data-k="invLookX"> обзор ↔</label>
@@ -316,7 +317,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.27';
+const GAME_VERSION = 'v1.28';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -331,6 +332,10 @@ function applyControlsMode(){
   if(sbHint) sbHint.textContent = isMobile ? 'тап по ❤ — открыть/закрыть' : 'Ё (~) — открыть/закрыть';
   const landBtn = document.getElementById('btn-land');
   if (landBtn) landBtn.style.display = isMobile ? 'block' : 'none';
+  // Кнопка перехода в браузер нужна только внутри Telegram: там fullscreen может быть запрещён,
+  // а в Chrome/Safari он работает. В обычном браузере её смысла нет.
+  const chromeBtn = document.getElementById('btn-chrome');
+  if (chromeBtn) chromeBtn.style.display = (isMobile && tgApp) ? 'block' : 'none';
   const modeBtn = document.getElementById('btn-controls-mode');
   if (modeBtn) modeBtn.textContent = isMobile ? '⌨ Переключить на клавиатуру + мышь' : '📱 Переключить на сенсорное управление';
   try { localStorage.setItem('controls-mode', isMobile ? 'touch' : 'kbm'); } catch (e) {}
@@ -343,6 +348,25 @@ function toggleControlsMode(ev){
 }
 applyControlsMode();
 
+// Переход в системный браузер (Chrome/Safari по умолчанию) с сохранением комнаты.
+// Логика: внутри Telegram на части устройств полноэкранный режим недоступен
+// (WKWebView на iOS, старые версии Telegram), а в обычном браузере requestFullscreen
+// работает. Открываем тот же адрес игры, добавляя ?room=СИД — applyRoomParam при старте
+// подставит комнату из ссылки, и игрок попадёт в ту же комнату, где был в Telegram.
+function openInBrowser(ev){
+  if(ev && ev.stopPropagation) ev.stopPropagation();
+  let url = location.href;
+  try{
+    const room = (document.getElementById('net-room').value.trim() || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24);
+    const u = new URL(location.href);
+    if(room) u.searchParams.set('room', room); // комната сохраняется между браузерами
+    url = u.toString();
+  }catch(e){}
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if(tg && typeof tg.openLink === 'function'){ try{ tg.openLink(url); return; }catch(e){} } // штатный выход во внешний браузер
+  const win = window.open(url, '_blank', 'noopener'); // запасной путь (обычный браузер)
+  if(!win && typeof netStatus === 'function') netStatus('⚠ Открой в браузере адрес: ' + url);
+}
 // ---------- Нативный полноэкранный режим Telegram (Bot API 8.0+) ----------
 // Встроенный браузер Telegram часто запрещает обычный requestFullscreen, поэтому сначала
 // пробуем нативный метод Mini App (tg.requestFullscreen), а браузерный — как запасной.
@@ -394,9 +418,9 @@ function goLandscape(ev){
     const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     netStatus(ios
       ? '⚠ Полный экран недоступен — обнови Telegram в App Store (нужна версия 11+), либо просто поверни телефон'
-      : '⚠ Полный экран недоступен во встроенном браузере Telegram — открой игру в Chrome, либо просто поверни телефон');
+      : '⚠ Полный экран недоступен во встроенном браузере Telegram — нажми «🌐 Открыть в браузере» в меню');
     const landBtn = document.getElementById('btn-land');
-    if(landBtn) landBtn.textContent = ios ? '⚠ Обнови Telegram (App Store) для полного экрана' : '⚠ Полный экран недоступен в Telegram — открой в Chrome';
+    if(landBtn) landBtn.textContent = ios ? '⚠ Обнови Telegram (App Store) для полного экрана' : '⚠ Полный экран недоступен — используй «🌐 Открыть в браузере»';
   };
   try {
     const el = document.documentElement;
