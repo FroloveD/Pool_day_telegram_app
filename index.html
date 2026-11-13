@@ -265,6 +265,7 @@
         <option value="pool">🌊 Подводный мир</option>
         <option value="ambient">🌫 Эмбиент</option>
         <option value="club">🔊 Ночной клуб</option>
+        <option value="action">⚡ Мобилизация</option>
         <option value="off">🚫 Выкл</option>
       </select></div>
     <div class="set-row"><span>🖱 Чувствительность мыши</span><input type="range" data-set="sens" min="0.3" max="2.5" step="0.1"></div>
@@ -295,7 +296,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.15';
+const GAME_VERSION = 'v1.16';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -1300,7 +1301,9 @@ function applyVolumes(){
   gMusic.gain.value = settings.music;
 }
 // ФОНОВАЯ МУЗЫКА: процедурные треки без аудиофайлов, играются через gMusic (слайдер «Музыка»).
-// Три трека + «выкл», выбор — селектором в настройках, сохраняется в localStorage.
+// Четыре трека + «выкл», выбор — селектором в настройках, сохраняется в localStorage.
+// У КАЖДОГО ТРЕКА ЕСТЬ РАЗВИТИЕ: 16-тактовый цикл из секций (интро → нарастание → кульминация →
+// брейкдаун), трек звучит по-разному в разные моменты, а не как статичная петля.
 // stopAmbient() глушит все узлы текущего трека перед переключением
 let ambientNodes = [];
 function stopAmbient(){
@@ -1313,60 +1316,116 @@ function startAmbient(){
   ambientOn = true;
   const track = settings.track || 'pool';
   if(track === 'off') return;
-  // «Подводный мир»: глубокий пад из трёх расстроенных синусов с медленным дыханием громкости
-  if(track === 'pool'){
-    [[55, 0.5],[82.4, 0.3],[110, 0.22]].forEach(([f, v]) => {
-      const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f;
-      const g = AC.createGain(); g.gain.value = v * 0.5;
-      const lfo = AC.createOscillator(); lfo.frequency.value = 0.06 + Math.random()*0.05;
-      const lg = AC.createGain(); lg.gain.value = v * 0.25;
-      lfo.connect(lg); lg.connect(g.gain);
-      o.connect(g); g.connect(gMusic);
-      o.start(); lfo.start();
-      ambientNodes.push(o, lfo);
-    });
-  }
-  // «Эмбиент»: воздушный высокий пад (квинты) + filtered шум ветра, медленные подъёмы
-  else if(track === 'ambient'){
-    [[220, 0.16],[330, 0.12],[440, 0.08],[660, 0.05]].forEach(([f, v]) => {
-      const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
-      const g = AC.createGain(); g.gain.value = v * 0.4;
-      const lfo = AC.createOscillator(); lfo.frequency.value = 0.04 + Math.random()*0.06;
-      const lg = AC.createGain(); lg.gain.value = v * 0.3;
-      lfo.connect(lg); lg.connect(g.gain);
-      o.connect(g); g.connect(gMusic);
-      o.start(); lfo.start();
-      ambientNodes.push(o, lfo);
-    });
-    const src = AC.createBufferSource(); src.buffer = getNoiseBuf(); src.loop = true;
-    const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 400; f.Q.value = 0.5;
-    const g = AC.createGain(); g.gain.value = 0.03;
-    const lfo = AC.createOscillator(); lfo.frequency.value = 0.03;
-    const lg = AC.createGain(); lg.gain.value = 250;
-    lfo.connect(lg); lg.connect(f.frequency);
-    src.connect(f); f.connect(g); g.connect(gMusic);
-    src.start(); lfo.start();
-    ambientNodes.push(src, lfo);
-  }
-  // «Ночной клуб»: техно-петля — кик на каждую долю (110 BPM), хэты на восьмые, бас-линия.
-  // Планировщик с опережением 0.2с — точный тайминг WebAudio, интервал только планирует
-  else if(track === 'club'){
-    const bpm = 110, beat = 60/bpm, ahead = 0.2;
-    let nextBeat = AC.currentTime + 0.1, step = 0;
-    const bassLine = [55, 55, 73.4, 55, 65.4, 55, 73.4, 82.4]; // бас по восьмым (A1-подобная линия)
-    const tick = setInterval(() => {
-      if(!AC) return;
-      while(nextBeat < AC.currentTime + ahead){
-        const t = nextBeat;
-        playThump(t, 150, 45, 0.16, 0.9, gMusic);                      // кик
-        playNoise(t + beat/2, 0.03, 0.16, 'highpass', 7000, 0, 0.7, gMusic); // хэт на «и»
-        if(step % 2 === 0) playNoise(t, 0.05, 0.2, 'bandpass', 1800, 900, 1.5, gMusic); // снейр-клап на чётные
-        playThump(t, bassLine[step % 8], bassLine[step % 8] * 0.7, beat * 0.45, 0.35, gMusic); // бас
-        nextBeat += beat/2; step++;
-      }
-    }, 80);
-    ambientNodes.push({ clearInterval: () => clearInterval(tick) });
-  }
+  if(track === 'pool') return startTrackPool();
+  if(track === 'ambient') return startTrackAmbient();
+  if(track === 'club') return startTrackClub();
+  if(track === 'action') return startTrackAction();
+}
+// --- Помощники музыкального движка ---
+// Планировщик: с опережением 0.25с вызывает onStep(номер_восьмой, время). Точный тайминг
+// даёт WebAudio (время t), setInterval только планирует; step — счётчик восьмых нот от старта
+function musicScheduler(bpm, onStep){
+  const stepDur = 30/bpm; // восьмая нота = полдоли
+  let next = AC.currentTime + 0.1, step = 0;
+  const tick = setInterval(() => {
+    if(!AC) return;
+    while(next < AC.currentTime + 0.25){
+      onStep(step, next);
+      next += stepDur; step++;
+    }
+  }, 80);
+  ambientNodes.push({ clearInterval: () => clearInterval(tick) });
+}
+// Пад: синус с плавной атакой и затуханием (мягкая «подушка» гармонии)
+function padNote(t, f, dur, vol){
+  const o = AC.createOscillator(); o.type = 'sine'; o.frequency.value = f;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + dur*0.4);
+  g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(g); g.connect(gMusic);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+// Колокольчик/щипок: короткая нота с резким спадом — для мелодических «бликов» и арпеджио
+function pluck(t, f, dur, vol){
+  const o = AC.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(gMusic);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+// «Подводный мир»: гармония Am → F → C → G (такт на аккорд). Развитие по 16-тактовому циклу:
+// 0–3 такта — только корневые ноты; 4–7 — добавляются квинта и октава; 8–11 — редкие высокие
+// «блики» из пентатоники; 12–15 — всё вместе + мягкая подкачка на сильную долю. Затем цикл повторяется
+function startTrackPool(){
+  const chords = [[55,110,164.81],[43.65,87.31,130.81],[65.41,130.81,196],[49,98,146.83]];
+  const pent = [220, 261.63, 293.66, 329.63, 392, 440]; // ля-минорная пентатоника для бликов
+  musicScheduler(60, (step, t) => {
+    const bar = Math.floor(step/8), ph = bar % 16, ch = chords[bar % 4];
+    if(step % 8 === 0){ // начало такта — новый пад длиной в такт
+      const barDur = 8 * (30/60);
+      padNote(t, ch[0], barDur, 0.30);
+      if(ph >= 4) padNote(t, ch[1], barDur, 0.16);
+      if(ph >= 4) padNote(t, ch[2], barDur, 0.10);
+      if(ph >= 12) playThump(t, 60, 40, 0.5, 0.25, gMusic);
+    }
+    if(ph >= 8 && step % 8 === 4 && Math.random() < 0.7) pluck(t, pent[Math.floor(Math.random()*pent.length)]*2, 1.2, 0.10);
+  });
+}
+// «Эмбиент»: длинный дрон на 8-тактовый блок + «колокольчики», плотность которых растёт
+// с каждым блоком (0.15 → 0.8) — трек постепенно «просыпается» и становится насыщеннее
+function startTrackAmbient(){
+  const scale = [220, 246.94, 277.18, 329.63, 369.99, 440, 493.88]; // ля-минор
+  musicScheduler(60, (step, t) => {
+    const block = Math.floor(step/64); // 8-тактовые блоки
+    if(step % 64 === 0) padNote(t, 110, 64 * (30/60), 0.12);
+    const density = Math.min(0.8, 0.15 + block*0.2);
+    if(Math.random() < density/4) pluck(t, scale[Math.floor(Math.random()*scale.length)] * (Math.random() < 0.3 ? 2 : 1), 2.5, 0.09);
+  });
+  // ветер: шум с медленно дышащим фильтром (400±250 Гц, период ~30с)
+  const src = AC.createBufferSource(); src.buffer = getNoiseBuf(); src.loop = true;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 400; f.Q.value = 0.5;
+  const g = AC.createGain(); g.gain.value = 0.03;
+  const lfo = AC.createOscillator(); lfo.frequency.value = 0.03;
+  const lg = AC.createGain(); lg.gain.value = 250;
+  lfo.connect(lg); lg.connect(f.frequency);
+  src.connect(f); f.connect(g); g.connect(gMusic);
+  src.start(); lfo.start();
+  ambientNodes.push(src, lfo);
+}
+// «Ночной клуб»: техно 110 BPM с классическим развитием по 16-тактовому циклу:
+// 0–1 такты — только хэты; 2–3 — +хэты офф-бит; 4–7 — кик и бас; 8–11 — +клэп;
+// 12–13 — брейкдаун (без кика/баса, райзер-шум вверх); 14–15 — возврат на полную
+function startTrackClub(){
+  const bpm = 110;
+  const bassLine = [55, 0, 55, 73.4, 0, 55, 65.4, 73.4]; // 0 = пауза в басу
+  musicScheduler(bpm, (step, t) => {
+    const bar = Math.floor(step/8), ph = bar % 16, s8 = step % 8;
+    const full = ph >= 4 && !(ph >= 12 && ph < 14); // кик+бас с 4-го такта, кроме брейкдауна
+    if(full && s8 % 2 === 0) playThump(t, 150, 45, 0.16, 0.9, gMusic); // кик на четверти
+    if(ph >= 2 && s8 % 2 === 1) playNoise(t, 0.03, 0.15, 'highpass', 7000, 0, 0.7, gMusic); // хэт на «и»
+    if(ph >= 8 && (s8 === 2 || s8 === 6)) playNoise(t, 0.06, 0.25, 'bandpass', 1800, 900, 1.5, gMusic); // клэп
+    const bf = bassLine[s8];
+    if(full && bf) playThump(t, bf, bf*0.7, (30/bpm)*0.9, 0.35, gMusic); // бас восьмыми по линии
+    if(ph >= 12 && ph < 14 && s8 === 0) playNoise(t, (30/bpm)*8, 0.12, 'bandpass', 300, 4000, 0.8, gMusic); // райзер
+  });
+}
+// «Мобилизация»: тревожный трек 140 BPM под бой. Развитие: 0–3 — пульсирующая бас-остината;
+// 4–7 — +минорное арпеджио; 8–11 — +кик на четверти и громче бас; 12–15 — +высокий «сигнал
+// тревоги» раз в такт. Цикл 16 тактов
+function startTrackAction(){
+  const bpm = 140;
+  const ost = [55, 55, 82.4, 55, 65.4, 55, 73.4, 82.4]; // бас-остината восьмыми
+  const arp = [220, 261.63, 329.63, 440]; // ля-минорное арпеджио
+  musicScheduler(bpm, (step, t) => {
+    const bar = Math.floor(step/8), ph = bar % 16, s8 = step % 8;
+    const f = ost[s8];
+    if(f) playThump(t, f, f*0.8, (30/bpm)*0.8, ph >= 8 ? 0.5 : 0.35, gMusic);
+    if(ph >= 4) pluck(t, arp[s8 % 4], 0.15, 0.08);
+    if(ph >= 8 && s8 % 2 === 0) playThump(t, 150, 45, 0.12, 0.7, gMusic); // кик
+    if(ph >= 12 && s8 === 0) pluck(t, 880, 0.8, 0.06); // «сигнал тревоги»
+  });
 }
 // Шаги: раньше был чистый осциллятор 85–120 Гц — телефонные динамики не воспроизводят
 // такие частоты, и шагов не было слышно. Теперь шаг = шумовой хлопок подошвы (bandpass-шум
