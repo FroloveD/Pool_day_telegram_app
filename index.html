@@ -316,7 +316,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.25';
+const GAME_VERSION = 'v1.26';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -2230,9 +2230,36 @@ document.getElementById('net-invite').addEventListener('click', () => {
     const inviteText=`Комната ${room}. Сервер: ${decodeURIComponent(server)}. Присоединяйся: ${link}`;
     const shareUrl=`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(inviteText)}`;
     const win=window.open(shareUrl,'_blank','noopener');
-    if(!win && navigator.clipboard) navigator.clipboard.writeText(inviteText).then(()=>netStatus('Открой Telegram и отправь друзьям: '+link));
+    if(!win) copyInviteText(inviteText); // попап заблокирован — копируем с запасным вариантом
   }
 });
+// Копирование ссылки-приглашения с запасным вариантом.
+// Логика: в вебвью Telegram и без HTTPS navigator.clipboard.writeText часто запрещён
+// (NotAllowedError: Write permission denied) — необработанный отказ раньше вылетал
+// тостом «Promise: NotAllowedError…». Теперь: 1) пробуем clipboard API,
+// 2) при отказе — скрытая textarea + execCommand('copy'), 3) иначе просто показываем
+// текст приглашения в строке статуса, чтобы можно было скопировать вручную.
+function legacyCopy(text){
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; // вне экрана, но в DOM — иначе select не сработает
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand('copy'); // устаревший, но работает в вебвью без разрешений
+    ta.remove();
+    return ok;
+  }catch(e){ return false; }
+}
+function copyInviteText(text){
+  const done = () => { netStatus('📋 Скопировано — отправь друзьям: ' + text); showMsg('📋 Ссылка скопирована'); };
+  const fail = () => { netStatus('⚠ Буфер запрещён — скопируй вручную: ' + text); showMsg('⚠ Буфер запрещён, текст в статусе'); };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done).catch(() => { legacyCopy(text) ? done() : fail(); });
+  } else {
+    legacyCopy(text) ? done() : fail();
+  }
+}
 function netPublish(now){
   if(!netConnected) return;
   if(now-netLastSend>50){
