@@ -296,7 +296,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.16';
+const GAME_VERSION = 'v1.17';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -1431,15 +1431,37 @@ function startTrackAction(){
 // такие частоты, и шагов не было слышно. Теперь шаг = шумовой хлопок подошвы (bandpass-шум
 // 400–600 Гц слышен на любом динамике) + короткий низкий тамп для «веса».
 // В бассейне — всплеск: более высокий шум с длинным хвостом
-function stepSound(inPool){
+// ПОЗИЦИОННЫЕ ШАГИ: слышны только ЧУЖИЕ шаги (ботов и сетевых игроков), свои — нет.
+// Логика громкости и направления:
+//   1) затухание по расстоянию — нелинейное (степень 1.4): вблизи громко, к краю радиуса
+//      слышимости (20 м) быстро уходит в тишину, как в реальности;
+//   2) стерео-панорама — проекция направления на источник на «правый» вектор взгляда
+//      (право = (cos yaw, sin yaw), как в strafe-движении): источник справа — звук в правом наушнике;
+//   3) в бассейне — всплеск (более высокий шум с хвостом), на суше — глухой шлепок подошвы.
+function stepSoundAt(sx, sy, sz, inPool){
   if(!AC) return;
+  const dx = sx - P.x, dz = sz - P.z, dy = (sy || P.y) - P.y;
+  const dist = Math.hypot(dx, dy, dz);
+  const RANGE = 20; // радиус слышимости шагов в метрах
+  if(dist > RANGE || dist < 0.4) return; // слишком далеко — тихо; слишком близко (это мы сами) — не играем
+  const att = Math.pow(1 - dist / RANGE, 1.4); // нелинейное затухание громкости
+  // стерео-панорама: скалярное произведение нормированного направления на источник и «правого» вектора
+  let pan = 0;
+  if(dist > 0.01){
+    const cy = Math.cos(P.yaw), sy2 = Math.sin(P.yaw);
+    pan = Math.max(-1, Math.min(1, ((dx/dist)*cy + (dz/dist)*sy2) * 0.85)); // 0.85 — чуть уже полного стерео
+  }
+  // цепочка: гейн (громкость по дистанции) → панорама (лево/право) → канал «Шаги»
+  const g = AC.createGain(); g.gain.value = att;
+  if(AC.createStereoPanner){ const p = AC.createStereoPanner(); p.pan.value = pan; g.connect(p); p.connect(gStep); }
+  else g.connect(gStep); // запасной путь для старых браузеров без панорамы
   const t = AC.currentTime;
   if(inPool){
-    playNoise(t, 0.12, 0.16, 'bandpass', 900 + Math.random()*300, 2500, 1.2, gStep);
-    playThump(t, 180, 90, 0.08, 0.06, gStep);
+    playNoise(t, 0.12, 0.16, 'bandpass', 900 + Math.random()*300, 2500, 1.2, g);
+    playThump(t, 180, 90, 0.08, 0.06, g);
   } else {
-    playNoise(t, 0.06, 0.14, 'bandpass', 400 + Math.random()*200, 150, 1.0, gStep);
-    playThump(t, 160, 80, 0.05, 0.08, gStep);
+    playNoise(t, 0.06, 0.14, 'bandpass', 400 + Math.random()*200, 150, 1.0, g);
+    playThump(t, 160, 80, 0.05, 0.08, g);
   }
 }
 // Привязка слайдеров настроек в стартовом меню + селектор музыкального трека
@@ -2652,10 +2674,22 @@ function update(dt, t){
     if(P.y < g){ if(P.vy < -7) beep('land'); P.y = g; P.vy = 0; }
     P.airborne = !inPool && (P.vy > 0.5 || P.y > g + 0.05);
     collide(P, 0.4);
-    if(P.moving && !P.airborne && P.hp > 0){
-      stepT -= dt;
-      if(stepT <= 0){ stepT = inPool ? 0.5 : 0.38; stepSound(inPool); }
-    } else if(stepT < 0.15) stepT = 0.15;
+    // Свои шаги беззвучны (как в CS): слышим только чужие. Ниже — учёт шагов ботов и сетевых игроков:
+    // меряем пройденный ими путь за кадр, каждые ~0.8 м пути — один шаг с громкостью/панорамой по позиции.
+    const trackSteps = (ent) => {
+      if(ent.alive === false || ent._spx === undefined){ ent._spx = ent.x; ent._spz = ent.z; ent._sacc = 0; ent._stT = 0; return; }
+      const dd = Math.hypot(ent.x - ent._spx, ent.z - ent._spz);
+      ent._spx = ent.x; ent._spz = ent.z;
+      if(dd > 3){ ent._sacc = 0; return; } // телепорт/респаун/дозагрузка синка — шаги не считаем
+      ent._sacc += dd; ent._stT -= dt;
+      if(ent._sacc >= 0.8 && ent._stT <= 0){ // 0.8 м на шаг + защита от частоты (не чаще 1 шага / 0.22 с)
+        ent._sacc = 0; ent._stT = 0.22;
+        const pl = !!(inAnyPool(ent.x, ent.z, 0) && ent.y < -0.2); // тот же критерий «в бассейне», что у игрока
+        stepSoundAt(ent.x, ent.y, ent.z, pl);
+      }
+    };
+    bots.forEach(trackSteps);
+    netPlayers.forEach(trackSteps);
 
     if(!netConnected || netIsHost){
     const D = diff();
