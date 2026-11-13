@@ -53,6 +53,8 @@
      больше видимой области, поэтому высоту меню берём из viewportStableHeight (задаётся в JS).
      overflow:auto — если контент меню всё же выше экрана, его можно прокрутить */
   .overlay{position:fixed;inset:0;height:var(--app-h,100%);overflow:auto;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;background:rgba(0,10,25,.96);color:#fff;text-align:center;z-index:10;pointer-events:auto}
+  .overlay::before,.overlay::after{content:'';display:block;height:1px;margin:auto;flex-shrink:0} /* распорки-центрирование без потери скролла при переполнении */
+  .overlay > *{flex-shrink:0} /* элементы меню не сжимаются — всё прокручивается до конца */
   .overlay h1{margin:0;font-size:32px;color:#ffd76e}
   .overlay p{margin:0;opacity:.85;line-height:1.6;font-size:14px;max-width:600px}
   .overlay button{pointer-events:auto;font-size:18px;padding:14px 36px;border:0;border-radius:8px;background:#2f8f4e;color:#fff;cursor:pointer;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.5);z-index:11}
@@ -329,7 +331,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.23';
+const GAME_VERSION = 'v1.24';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -2053,6 +2055,32 @@ const tgApp = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp
 let tgBotUsername = new URLSearchParams(location.search).get('bot') || (window.GAME_CONFIG && window.GAME_CONFIG.botUsername) || '';
 if (window.GAME_CONFIG && window.GAME_CONFIG.cloudWsUrl) { document.getElementById('net-server').value = window.GAME_CONFIG.cloudWsUrl; }
 else { const me = document.getElementById('net-mode'); if (me && me.value === 'cloud') me.dispatchEvent(new Event('change')); }
+
+// ---------- СИД КОМНАТЫ ----------
+// Логика: для каждого отдельного запуска игры генерируем случайный сид комнаты из 12 символов.
+// Посторонние больше не попадают в общую «pool-day» случайно, а друзья подключаются
+// по ссылке-приглашению (кнопка «Пригласить в комнату» шлёт ?room=СИД).
+// Если запуск по ссылке с ?room=... (или start_param из Telegram-бота) — используем комнату из ссылки.
+function randomRoomSeed(){
+  const abc = 'abcdefghjkmnpqrstuvwxyz23456789'; // алфавит без похожих символов (i,l,o,0,1) — сид легко продиктовать
+  const buf = new Uint32Array(12);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(buf); // криптостойкий источник, где доступен
+  else for (let i = 0; i < 12; i++) buf[i] = Math.floor(Math.random() * 0xffffffff); // запасной вариант для старых браузеров
+  let s = '';
+  for (let i = 0; i < 12; i++) s += abc[buf[i] % abc.length];
+  return s;
+}
+(function applyRoomParam(){
+  // ВАЖНО: обрабатываем ссылку ВНЕ блока if (tgApp) — раньше ?room= не работал на десктопе без Telegram
+  const startParam = tgApp && tgApp.initDataUnsafe && tgApp.initDataUnsafe.start_param;
+  const query = new URLSearchParams(location.search);
+  const roomParam = startParam || query.get('room');
+  const roomEl = document.getElementById('net-room');
+  if (roomParam && /^[a-zA-Z0-9_-]{1,24}$/.test(roomParam)) roomEl.value = roomParam; // комната из ссылки-приглашения
+  else roomEl.value = randomRoomSeed(); // свой уникальный сид на этот запуск
+  const serverParam = query.get('server');
+  if (serverParam && /^wss?:\/\//i.test(serverParam)) document.getElementById('net-server').value = serverParam;
+})();
 if (tgApp) {
   try {
     tgApp.ready(); tgApp.expand();
@@ -2080,12 +2108,6 @@ if (tgApp) {
       const hint = document.getElementById('tg-user-hint');
       if (hint) hint.textContent = 'Telegram: ' + (fullName || tgUser.username || 'игрок');
     }
-    const startParam = tgApp.initDataUnsafe && tgApp.initDataUnsafe.start_param;
-    const query = new URLSearchParams(location.search);
-    const roomParam = startParam || query.get('room');
-    if (roomParam && /^[a-zA-Z0-9_-]{1,24}$/.test(roomParam)) document.getElementById('net-room').value = roomParam;
-    const serverParam = query.get('server');
-    if (serverParam && /^wss?:\/\//i.test(serverParam)) document.getElementById('net-server').value = serverParam;
     if (tgApp.BackButton) tgApp.BackButton.onClick(() => { if (netConnected) netDisconnect(); else tgApp.close(); });
   } catch (e) { console.warn('Telegram WebApp init:', e); }
 }
@@ -2100,6 +2122,7 @@ if (netModeEl) netModeEl.addEventListener('change', () => {
 let netSocket = null, netConnected = false, netIsHost = false, netId = null;
 let netShotT = 0; // окно «только что выстрелил» для передачи факта выстрела по сети
 let netTeam = 'red', netName = 'Игрок', netLastSend = 0, netLastBots = 0;
+let lastNetNotice = ''; // последнее серверное уведомление — показываем как причину, если сервер закрыл соединение
 const netPlayers = new Map();
 const netStatusEl = document.getElementById('net-status');
 function netStatus(s){ if(netStatusEl) netStatusEl.textContent = s; }
@@ -2115,6 +2138,7 @@ function netConnect(){
   if(!/^wss?:\/\//i.test(url)){ netStatus('Адрес сервера должен начинаться с ws:// или wss://'); return; }
   netStatus('Подключение к серверу…');
   try{
+    lastNetNotice = ''; // новое подключение — сбрасываем причину прошлого закрытия
     netSocket = new WebSocket(url);
     netSocket.addEventListener('open', () => netSend({type:'join', room, team:netTeam, name:netName, initData:(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) || ''}));
     netSocket.addEventListener('message', ev => {
@@ -2122,7 +2146,7 @@ function netConnect(){
       if(m.type === 'welcome'){
         netId = m.id; netIsHost = !!m.host; netConnected = true;
         P.team = netTeam; const nsp=getTeamSpawn(P.team === 'blue',P); P.x=nsp[0]; P.z=nsp[1]; P.spawnProt = 0.75;
-        netStatus(`В комнате ${room} · ${netIsHost ? 'вы хост матча' : 'подключено'} · команда ${netTeam === 'red' ? 'красных' : 'синих'}` + (m.verified ? ' · ✅ Telegram' : ''));
+        netStatus(`В комнате ${room} · игроков: ${m.players} · ${netIsHost ? 'вы хост матча' : 'подключено'} · команда ${netTeam === 'red' ? 'красных' : 'синих'}` + (m.verified ? ' · ✅ Telegram' : ''));
         const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='block';
         updateBotPanel();
         showMsg('Сеть подключена');
@@ -2201,11 +2225,18 @@ function netConnect(){
       } else if(m.type === 'killfeed'){
         // чужая запись ленты убийств — просто показываем (не пересылаем дальше)
         addKillFeed(m.k, m.kt, !!m.kb, m.v, m.vt, !!m.vb, m.w, !!m.hs);
-      } else if(m.type === 'notice') netStatus(m.text||'Серверное сообщение');
+      } else if(m.type === 'notice'){
+        // серверные уведомления (например, «подпись не прошла») запоминаем: если сервер следом
+        // закроет соединение, покажем настоящую причину, а не безликое «соединение закрыто»
+        lastNetNotice = m.text || '';
+        netStatus(lastNetNotice);
+        showMsg('⚠ ' + lastNetNotice); // дублируем всплывающим сообщением, чтобы заметить в игре
+      }
+
     });
     netSocket.addEventListener('close', () => {
       netConnected=false; netIsHost=false; netId=null; netPlayers.forEach(p => removeTag(p)); netPlayers.clear();
-      netStatus('Соединение закрыто. Одиночная игра продолжает работать.'); const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='none';
+      netStatus(lastNetNotice ? 'Соединение закрыто сервером: ' + lastNetNotice : 'Соединение закрыто. Одиночная игра продолжает работать.'); const inviteBtn=document.getElementById('net-invite'); if(inviteBtn) inviteBtn.style.display='none';
         updateBotPanel();
     });
     netSocket.addEventListener('error', () => netStatus('Не удалось подключиться. Проверь адрес и запущен ли сервер.'));

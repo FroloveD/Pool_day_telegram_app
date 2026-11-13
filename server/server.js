@@ -7,7 +7,7 @@ const path = require("path");
 const PORT = Number(process.env.PORT || 8080);
 const MAX_ROOM_PLAYERS = Number(process.env.MAX_ROOM_PLAYERS || 10); // лимит игроков на комнату
 const ROOM_EMPTY_TTL_MS = 10 * 60 * 1000; // пустая комната живёт не дольше 10 минут
-const VERSION = "1.23"; // версия билда; синхронизируется с GAME_VERSION в index.html
+const VERSION = "1.24"; // версия билда; синхронизируется с GAME_VERSION в index.html
 const INTERNET_MODE = process.argv.includes("--internet");
 const rooms = new Map();
 
@@ -56,8 +56,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
   if (req.url === "/health") {
+    // Список комнат с числом игроков: по нему извне (браузером) можно проверить,
+    // что оба игрока реально попали в ОДНУ комнату с одинаковым именем
+    const roomList = [...rooms.values()].map(r => ({ name: r.name, players: r.peers.size }));
     res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
-    return res.end(JSON.stringify({ ok: true, service: "fy-pool-day-relay", rooms: rooms.size, version: VERSION }));
+    return res.end(JSON.stringify({ ok: true, service: "fy-pool-day-relay", rooms: roomList.length, roomList, version: VERSION }));
   }
   res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
   res.end("fy_pool_day multiplayer relay is running\n");
@@ -115,12 +118,21 @@ wss.on("connection", (ws) => {
       const initData = typeof msg.initData === "string" ? msg.initData : "";
       let verified = false;
       if (initData) {
-        const v = verifyInitData(initData);
-        if (!v.ok) {
-          send(ws, { type: "notice", text: "Подпись Telegram не прошла проверку" });
-          return ws.close(1008, "Bad signature");
+        // Логика: подпись Telegram проверяем ТОЛЬКО когда на сервере задан секрет BOT_TOKEN.
+        // Если секрета нет — проверить подпись нечем, и раньше мы кикали Telegram-игрока
+        // (verifyInitData всегда возвращал ok:false), из-за чего «игроки не видели друг друга».
+        // Теперь без BOT_TOKEN пускаем игрока с verified=false и предупреждением — игра работает,
+        // а после задания секрета проверка автоматически включается снова.
+        if (!BOT_TOKEN) {
+          send(ws, { type: "notice", text: "Проверка подписи Telegram отключена: на сервере не задан секрет BOT_TOKEN" });
+        } else {
+          const v = verifyInitData(initData);
+          if (!v.ok) {
+            send(ws, { type: "notice", text: "Подпись Telegram не прошла проверку" });
+            return ws.close(1008, "Bad signature");
+          }
+          verified = true;
         }
-        verified = true;
       }
       const id = cryptoId();
       const player = {
