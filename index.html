@@ -2,8 +2,6 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="screen-orientation" content="landscape">
-<meta name="x5-orientation" content="landscape">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- Safari на iOS не поддерживает requestFullscreen: единственный способ «полного экрана» —
      запуск с иконки домашнего экрана (standalone-режим PWA, без интерфейса Safari).
@@ -44,10 +42,6 @@
     100%{opacity:0;transform:translate(-50%,-110px)}
   }
   #err{position:fixed;left:10px;top:10px;font-size:14px;color:#ff4444;text-shadow:0 1px 2px #000;white-space:pre-wrap;z-index:99999;background:rgba(0,0,0,0.9);padding:12px;border-radius:6px;max-width:500px;border:1px solid #ff4444;display:none}
-  #rotate-hint{display:none;position:fixed;inset:0;z-index:99998;background:#0a0e14;color:#cfe3ff;font:600 20px/1.5 system-ui,sans-serif;align-items:center;justify-content:center;text-align:center;flex-direction:column;gap:10px}
-  #rotate-hint .ico{font-size:56px;animation:rotphone 1.6s ease-in-out infinite alternate}
-  @keyframes rotphone{from{transform:rotate(0)}to{transform:rotate(90deg)}}
-  @media (orientation:portrait){ body.force-landscape #rotate-hint{display:flex} }
   
   /* height:var(--app-h) — фикс «верх страницы скрыт» в Telegram (особенно iOS): 100vh вебвью
      больше видимой области, поэтому высоту меню берём из viewportStableHeight (задаётся в JS).
@@ -193,13 +187,6 @@
     #wgrid{max-height:62vh}
     .wbtn{min-width:150px;padding:6px 10px}
   }
-  #rotate{position:fixed;inset:0;z-index:200;background:#0b1118;color:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;padding:24px;touch-action:none}
-  body.need-rotate #rotate{display:flex}
-  #rotate .ph{width:54px;height:96px;border:4px solid #fff;border-radius:12px;position:relative;animation:rotphone 2.2s ease-in-out infinite}
-  #rotate .ph::after{content:"";position:absolute;left:50%;bottom:6px;width:16px;height:3px;margin-left:-8px;background:#fff;border-radius:2px}
-  @keyframes rotphone{0%,25%{transform:rotate(0deg)}60%,100%{transform:rotate(-90deg)}}
-  #rotate p{font-size:18px;margin:0;line-height:1.4}
-  #rotate button{padding:10px 22px;font-size:15px;border-radius:8px;border:0;background:#34506b;color:#fff}
   #mob-opts{display:none;margin-top:6px;font-size:12px;color:#cfd8e3;gap:6px 14px;flex-wrap:wrap;justify-content:center;max-width:520px}
   #mob-opts label{white-space:nowrap}
   /* Подсказка для Safari на iPhone: Safari не умеет requestFullscreen, полный экран —
@@ -211,7 +198,6 @@
 </style>
 </head>
 <body>
-<div id="rotate"><div class="ph"></div><p>Игра работает только в горизонтальной ориентации.<br>Поверните устройство набок.</p><button type="button" onclick="goLandscape(event)">⛶ Во весь экран · горизонтально</button></div>
 <div id="err"></div>
 <div id="safari-hint" style="display:none">
   <div class="sh-title">📲 Полный экран в Safari</div>
@@ -223,7 +209,6 @@
   </ol>
   <button type="button" id="safari-hint-ok">Понятно</button>
 </div>
-<div id="rotate-hint" onclick="goLandscape(event)"><div class="ico">📱</div>Поверните телефон горизонтально<br><span style="font-size:14px;opacity:.7">игра идёт только в альбомном режиме · нажми, чтобы развернуть автоматически</span></div>
 <canvas id="c"></canvas>
 <div id="hud">
   <div id="cross"><i></i><i></i><i></i><i></i></div>
@@ -331,22 +316,16 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.24';
+const GAME_VERSION = 'v1.25';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
 let isMobile = (isTouchDevice || window.innerWidth < 800) && !(typeof matchMedia === 'function' && matchMedia('(pointer:fine)').matches && matchMedia('(hover:hover)').matches);
 try { const savedMode = localStorage.getItem('controls-mode'); if (savedMode) isMobile = savedMode === 'touch'; } catch (e) {}
-// Телефон/планшет (не настольный ПК): для них ориентация строго горизонтальная
-const isHandheld = /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-  || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
-  || (typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches && !matchMedia('(hover:hover)').matches);
-let orientBlocked = false;
 function applyControlsMode(){
   document.body.classList.toggle('mob-visible', isMobile);
-  document.body.classList.toggle('force-landscape', isHandheld);
   document.getElementById('controls-desc').innerHTML = isMobile
-    ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Игра работает в горизонтальной ориентации.'
+    ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Ориентация на твой выбор — играй хоть вертикально'
     : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие<br><span class="kbd">+</span>/<span class="kbd">−</span> союзники ± · <span class="kbd">Ctrl +</span>/<span class="kbd">Ctrl −</span> противники ±<br>⚠ Приседай на <span class="kbd">C</span>: Ctrl+W браузер закрывает вкладку';
   const landBtn = document.getElementById('btn-land');
   if (landBtn) landBtn.style.display = isMobile ? 'block' : 'none';
@@ -361,10 +340,6 @@ function toggleControlsMode(ev){
   applyControlsMode();
 }
 applyControlsMode();
-window.addEventListener('touchstart', function forceOrientOnce(){
-  window.removeEventListener('touchstart', forceOrientOnce);
-  if(isHandheld) goLandscape();
-}, {once:true, passive:true});
 
 // ---------- Нативный полноэкранный режим Telegram (Bot API 8.0+) ----------
 // Встроенный браузер Telegram часто запрещает обычный requestFullscreen, поэтому сначала
@@ -2621,7 +2596,6 @@ function openBuyMenu(){
 function startBuyingProcess(ev){
   if(ev) ev.stopPropagation();
   ensureAudio();
-  if(isHandheld) goLandscape();
   playing = true;
   startEl.style.display = 'none';
   const ro = document.getElementById('roundover');
@@ -2791,8 +2765,8 @@ let last = performance.now();
 function frame(now){
   const dt = Math.min((now - last)/1000, 0.05);
   last = now;
-  if(playing && !orientBlocked) update(dt, now/1000);
-  if(playing && !orientBlocked && isMobile && mobCfg.autoFire && roundActive && wmenuEl.style.display !== 'flex') autoFireCheck();
+  if(playing) update(dt, now/1000);
+  if(playing && isMobile && mobCfg.autoFire && roundActive && wmenuEl.style.display !== 'flex') autoFireCheck();
   const ipk = 1 - Math.exp(-dt*14);
   netPlayers.forEach(p => {
     if(p.nx === undefined) return;
@@ -2813,7 +2787,7 @@ function frame(now){
     b.yawS += dy2*ipk;
   });
   netPublish(now);
-  if(!orientBlocked) draw(now/1000);
+  draw(now/1000);
   requestAnimationFrame(frame);
 }
 
@@ -3475,20 +3449,6 @@ function draw(t){
   }
 }
 
-// Строго горизонтальная ориентация на мобильных: в портрете игра на паузе под экраном «Поверните устройство»
-function checkOrient(){
-  const block = isHandheld && window.innerHeight > window.innerWidth;
-  if(block === orientBlocked) return;
-  orientBlocked = block;
-  document.body.classList.toggle('need-rotate', block);
-  if(block){
-    mouseDown = false;
-    for(const k in keys) keys[k] = false;
-    if(window.__resetJoy) window.__resetJoy();
-  }
-}
-window.addEventListener('resize', checkOrient);
-window.addEventListener('orientationchange', () => setTimeout(checkOrient, 200));
 
 // --- Подсказка для Safari на iPhone (показывается один раз) ---
 // Логика показа: устройство iOS, НО не Telegram (там свой нативный fullscreen) и НЕ
@@ -3510,12 +3470,6 @@ window.addEventListener('orientationchange', () => setTimeout(checkOrient, 200))
     });
   }catch(e){}
 })();
-if(isHandheld){
-  try{ screen.orientation.lock('landscape').catch(() => {}); }catch(e){}
-  // при первом касании — полноэкранный режим с блокировкой ландшафта (где браузер это позволяет)
-  document.addEventListener('touchend', function once(){ document.removeEventListener('touchend', once); goLandscape(); }, {passive:true});
-}
-checkOrient();
 
 requestAnimationFrame(frame);
 </script>
