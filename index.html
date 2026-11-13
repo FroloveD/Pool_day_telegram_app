@@ -30,7 +30,7 @@
   #scope .lv{position:absolute;top:0;bottom:0;left:50%;width:1px;background:rgba(10,10,10,0.9)}
   #scope .dot{position:absolute;left:50%;top:50%;width:4px;height:4px;transform:translate(-50%,-50%);border-radius:50%;background:rgba(10,10,10,0.9)}
   #stats{position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:20px;font-weight:700;text-shadow:0 1px 3px #000;background:rgba(0,0,0,.5);padding:4px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1)}
-  #hp{position:absolute;left:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000}
+  #hp{position:absolute;left:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000;pointer-events:auto;cursor:pointer} /* тап по сердечку = таблица счёта */
   #wname{position:absolute;left:20px;bottom:58px;font-size:18px;font-weight:700;text-shadow:0 1px 3px #000;color:#ffd76e;pointer-events:auto;cursor:pointer}
   #ammo{position:absolute;right:20px;bottom:20px;font-size:28px;font-weight:800;text-shadow:0 2px 4px #000}
   #msg{position:absolute;left:50%;top:35%;transform:translateX(-50%);font-size:28px;font-weight:800;text-shadow:0 2px 6px #000;text-align:center;color:#ffcc00;opacity:0}
@@ -316,7 +316,7 @@
 <script>
 // Версия билда: показывается в стартовом меню рядом с заголовком; дублируется в /health сервера.
 // Меняется вручную при каждом пуше с изменениями — так видно, что новая версия доехала до прода
-const GAME_VERSION = 'v1.26';
+const GAME_VERSION = 'v1.27';
 try{ const vEl = document.getElementById('game-version'); if(vEl) vEl.textContent = GAME_VERSION; }catch(e){}
 console.log('fy_pool_day ' + GAME_VERSION);
 const isTouchDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 'ontouchstart' in window;
@@ -327,6 +327,8 @@ function applyControlsMode(){
   document.getElementById('controls-desc').innerHTML = isMobile
     ? 'Сенсорное управление:<br>• Джойстик слева — движение · Правая часть — обзор<br>• 🦘 Прыжок · ⬇ Присед · 🛒 Магазин<br>Ориентация на твой выбор — играй хоть вертикально'
     : '<span class="kbd">W A S D</span> движение · <span class="kbd">мышь</span> обзор · <span class="kbd">ЛКМ</span> огонь<br><span class="kbd">Space</span> Прыжок · <span class="kbd">C</span> Присед · <span class="kbd">B</span> Магазин<br><span class="kbd">1</span> Основное · <span class="kbd">2</span> Пистолет · <span class="kbd">3</span> Нож · <span class="kbd">E</span> Подобрать оружие<br><span class="kbd">+</span>/<span class="kbd">−</span> союзники ± · <span class="kbd">Ctrl +</span>/<span class="kbd">Ctrl −</span> противники ±<br>⚠ Приседай на <span class="kbd">C</span>: Ctrl+W браузер закрывает вкладку';
+  const sbHint = document.querySelector('#scoreboard .hint');
+  if(sbHint) sbHint.textContent = isMobile ? 'тап по ❤ — открыть/закрыть' : 'Ё (~) — открыть/закрыть';
   const landBtn = document.getElementById('btn-land');
   if (landBtn) landBtn.style.display = isMobile ? 'block' : 'none';
   const modeBtn = document.getElementById('btn-controls-mode');
@@ -2225,10 +2227,15 @@ document.getElementById('net-invite').addEventListener('click', () => {
   const server=encodeURIComponent(document.getElementById('net-server').value.trim());
   const bot=(tgBotUsername||'YOUR_BOT_USERNAME').replace(/^@/,'');
   const link=`https://t.me/${bot}?startapp=${encodeURIComponent(room)}`;
-  if(tgApp && tgApp.openTelegramLink) tgApp.openTelegramLink(link);
+  const inviteText=`Комната ${room}. Сервер: ${decodeURIComponent(server)}. Присоединяйся: ${link}`;
+  const shareUrl=`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(inviteText)}`;
+  // Логика: раньше открывали профиль бота (t.me/bot?startapp=...) — при запуске игры через
+  // меню-кнопку параметр комнаты терялся, и друг попадал в свою случайную комнату.
+  // Теперь открываем штатный диалог «Переслать» (t.me/share/url) ВНУТРИ Telegram: игрок
+  // выбирает чат, отправляет сообщение со ссылкой, и у друга ссылка несёт startapp=КОМНАТА —
+  // он гарантированно подключится в ту же комнату, из которой отправили приглашение.
+  if(tgApp && tgApp.openTelegramLink) tgApp.openTelegramLink(shareUrl);
   else {
-    const inviteText=`Комната ${room}. Сервер: ${decodeURIComponent(server)}. Присоединяйся: ${link}`;
-    const shareUrl=`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(inviteText)}`;
     const win=window.open(shareUrl,'_blank','noopener');
     if(!win) copyInviteText(inviteText); // попап заблокирован — копируем с запасным вариантом
   }
@@ -2406,6 +2413,15 @@ function hideScoreboard(){
   scoreVisible = false;
   scoreboardEl.style.display = 'none';
 }
+// Тап/клик по «сердечку» (HP) открывает и закрывает таблицу счёта — на телефоне нет клавиши Ё,
+// а отдельную кнопку добавлять не хотим: HP всегда на виду и не мешает прицеливанию.
+// stopPropagation — чтобы тап не провалился в canvas и не был принят за прицеливание/выстрел.
+(function hpScoreToggle(){
+  const el = document.getElementById('hp');
+  if(!el) return;
+  el.addEventListener('click', (e) => { e.stopPropagation(); toggleScoreboard(); });
+  el.addEventListener('touchend', (e) => { e.preventDefault(); e.stopPropagation(); toggleScoreboard(); }, {passive:false});
+})();
 function renderScoreboard(){
   if(!scoreboardRowsEl) return;
   // строки: сам игрок (frags = statFrags) + другие игроки (fr/de приходят в их 'player'-пакетах)
